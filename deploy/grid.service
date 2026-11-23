@@ -12,29 +12,38 @@ Group=www
 WorkingDirectory=/www/wwwroot/todo/packages/server
 EnvironmentFile=/www/wwwroot/todo/.env
 
-# 堆上限写死在 ExecStart 里，不靠环境变量 —— 这样 systemctl cat 一眼能看到真实生效值
-ExecStart=/usr/bin/node --max-old-space-size=256 dist/index.js
+# 堆上限写死在 ExecStart 里，不靠环境变量 —— 这样 systemctl cat 一眼能看到真实生效值。
+#
+# node 必须写绝对路径：systemd 不读 PATH，也不 source .bashrc，
+# 所以 `node` 或 /usr/bin/node 在宝塔机器上多半是另一个版本（甚至不存在）。
+# 用 `which node` 确认真实路径后替换下面这一行。
+ExecStart=/www/server/nodejs/v22.22.0/bin/node --max-old-space-size=256 dist/index.js
 
 Restart=always
 RestartSec=3
 
-# ── 内存上限兜底 ────────────────────────────────────────────
-# 单进程超过 512M 说明有泄漏，让它重启。
+# ── 内存上限兜底（默认关闭）──────────────────────────────────
+# 这是可选项：有它才能"泄漏时自动重启"，没有不影响任何功能。
 #
-# 字段名按 systemd 版本选（两者语义相同，只是改名）：
+# 字段名按 systemd 版本选（语义相同，231 起改名）：
 #   systemd >= 231（Alibaba Cloud Linux 3 / CentOS 8+ / Ubuntu 20.04+）
 #       MemoryMax=512M
 #   systemd = 219（CentOS 7，阿里云老镜像常见）
 #       MemoryLimit=512M
 #
-# ⚠️ 但**不要**把启动失败归咎于这一行。systemd 对"启动准备阶段失败"
-# 一律冠以 `Failed with result 'resources'`，看着像资源限制，实际最常见的
-# 是下面两件事，具体原因永远在 journal 的**上一行**：
+# ⚠️ 但字段名对了也可能设不进去。实测 CentOS 7 / systemd 219 + cgroup v1
+# 未启 memory controller 时，服务照常 active，每次 daemon-reload 只多一条：
+#   grid.service:21: Invalid memory limit 536870912, ignoring: Invalid argument (-22)
+# 这种情况注释掉即可（-22 是 EINVAL，内核拒绝了这次写入）。
+#
+# ⚠️ 另外**不要**把启动失败归咎于这一行。systemd 对"启动准备阶段失败"
+# 一律冠以 `Failed with result 'resources'`，看着像资源限制，真实原因在
+# journal 的**上一行**：
 #   grid.service: Failed to load environment files: No such file or directory
 #   grid.service: Failed to run 'start' task: No such file or directory
-# 也就是 EnvironmentFile / WorkingDirectory 指错了，而不是内存。
+# 也就是 EnvironmentFile / WorkingDirectory 指错了。
 # 排查顺序：`journalctl -u grid -n 30 --no-pager` 看那一行，别先动这里。
-MemoryMax=512M
+#MemoryMax=512M
 
 # 日志
 StandardOutput=append:/www/log/grid/api.log
