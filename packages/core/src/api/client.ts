@@ -1,12 +1,19 @@
 import { z } from 'zod';
-import { oauthStatusSchema, oauthVerifyResultSchema, type OAuthStatus, type OAuthVerifyResult } from '../models/oauth';
+import { oauthStatusSchema, oauthVerifyResultSchema, type OAuthStatus, type OAuthVerifyResult } from '../models/oauth.js';
 import {
   apiErrorBodySchema,
   loginResponseSchema,
   sessionResponseSchema,
   type LoginResponse,
   type SessionResponse,
-} from '../models/session';
+} from '../models/session.js';
+import {
+  syncPullResponseSchema,
+  syncPushResponseSchema,
+  type SyncPullResponse,
+  type SyncPushRequest,
+  type SyncPushResponse,
+} from '../models/sync.js';
 
 /**
  * 客户端唯一允许抛的业务错误。
@@ -45,9 +52,29 @@ export interface ApiClient {
   verifyMicrosoft(): Promise<OAuthVerifyResult>;
   /** 连接入口。必须用顶层导航（window.location.assign），fetch 跳不过去微软登录页 */
   microsoftConnectUrl(): string;
+  /** 增量拉取。cursor=0 表示全量（"全量重建"就走这条） */
+  syncPull(body: { cursor: number; limit?: number }): Promise<SyncPullResponse>;
+  /** 推送本地操作队列。服务端逐条给结果，不做批量事务 */
+  syncPush(body: SyncPushRequest): Promise<SyncPushResponse>;
+  /** 服务端水位与条数，设置页用来对照"两边是不是真的收敛了" */
+  syncState(): Promise<SyncServerState>;
   /** 当前持有的 CSRF token（调试用） */
   currentCsrfToken(): string | null;
 }
+
+export interface SyncServerState {
+  serverCursor: number;
+  tasks: number;
+  tags: number;
+  conflicts: number;
+}
+
+const syncStateSchema = z.object({
+  serverCursor: z.number().int(),
+  tasks: z.number().int(),
+  tags: z.number().int(),
+  conflicts: z.number().int(),
+});
 
 const CSRF_HEADER = 'x-csrf-token';
 
@@ -148,6 +175,26 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
     microsoftConnectUrl() {
       return `${baseUrl}/oauth/microsoft/start`;
+    },
+
+    async syncPull(body) {
+      return request('/sync/pull', {
+        method: 'POST',
+        body: JSON.stringify({ cursor: body.cursor, limit: body.limit ?? 200 }),
+        parse: syncPullResponseSchema,
+      });
+    },
+
+    async syncPush(body) {
+      return request('/sync/push', {
+        method: 'POST',
+        body: JSON.stringify(body),
+        parse: syncPushResponseSchema,
+      });
+    },
+
+    async syncState() {
+      return request('/sync/state', { parse: syncStateSchema });
     },
 
     currentCsrfToken() {

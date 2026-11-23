@@ -12,12 +12,29 @@ export type Row = Record<string, unknown>;
 
 export type DriverKind = 'sqlite' | 'mysql';
 
-export interface Db {
+/** 事务内的句柄：只有这两个方法，杜绝"忘了传 tx 又用了池"的隐式串行错误 */
+export interface SqlExecutor {
+  query<T = Row>(sql: string, params?: readonly unknown[]): Promise<T[]>;
+  exec(sql: string): Promise<void>;
+}
+
+export interface Db extends SqlExecutor {
   readonly driver: DriverKind;
   /** 面向调用者的人话描述，用于启动日志与 healthz */
   readonly label: string;
-  query<T = Row>(sql: string, params?: readonly unknown[]): Promise<T[]>;
-  exec(sql: string): Promise<void>;
   ping(): Promise<boolean>;
   close(): Promise<void>;
+
+  /**
+   * 事务。回调内**必须**用传进来的 `tx`，用 `db.query` 会跑在另一条连接上，
+   * 那个更新不会被回滚，也不会和这里的行锁互斥。
+   */
+  transaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T>;
+
+  /**
+   * 取下一个全局变更水位。**只能在 transaction 内调用**，且必须与业务行写入同事务。
+   * 实现是 `UPDATE change_seq SET seq = seq + 1` 后回读——两条语句，
+   * 但都在同一事务里，行锁保证不会出现"跳号空洞"（详见 docs/03 §2.1）。
+   */
+  nextSeq(tx: SqlExecutor): Promise<number>;
 }

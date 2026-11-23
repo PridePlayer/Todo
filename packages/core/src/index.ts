@@ -7,7 +7,7 @@
 export {
   sessionUserSchema,
   type SessionUser,
-} from './models/user';
+} from './models/user.js';
 
 export {
   apiErrorBodySchema,
@@ -20,16 +20,16 @@ export {
   type ApiErrorBody,
   type LoginResponse,
   type SessionResponse,
-} from './models/session';
+} from './models/session.js';
 
 export {
   ApiError,
   createApiClient,
   type ApiClient,
   type ApiClientOptions,
-} from './api/client';
+} from './api/client.js';
 
-export { ulid, isUlid, ULID_LENGTH } from './id';
+export { ulid, isUlid, ULID_LENGTH } from './id.js';
 
 export {
   MAX_DEPTH,
@@ -44,7 +44,7 @@ export {
   type Tag,
   type TaskList,
   type Quadrant,
-} from './models/task';
+} from './models/task.js';
 
 export {
   quadrantOf,
@@ -62,9 +62,37 @@ export {
   compareSubtasks,
   visible,
   type QuadrantMeta,
-} from './quadrant';
+} from './quadrant.js';
 
-export { DepthLimitError, type TaskStore, type TaskPatch } from './repo/types';
+export { DepthLimitError, type TaskStore, type TaskPatch } from './repo/types.js';
+
+export {
+  hlcSchema,
+  syncOpSchema,
+  syncPushRequestSchema,
+  syncPushResponseSchema,
+  syncOpResultSchema,
+  syncPullRequestSchema,
+  syncPullResponseSchema,
+  syncChangeSchema,
+  syncConflictSchema,
+  compareHlc,
+  SYNC_TABLES,
+  SYNC_ACTIONS,
+  SYNC_OP_STATUS,
+  HLC_MAX_SKEW_MS,
+  type Hlc,
+  type SyncOp,
+  type SyncAction,
+  type SyncTable,
+  type SyncOpStatus,
+  type SyncOpResult,
+  type SyncConflict,
+  type SyncChange,
+  type SyncPushRequest,
+  type SyncPushResponse,
+  type SyncPullResponse,
+} from './models/sync.js';
 
 export {
   oauthAccountSchema,
@@ -76,4 +104,4 @@ export {
   type OAuthStatus,
   type OAuthVerifyResult,
   type OAuthCallbackReason,
-} from './models/oauth';
+} from './models/oauth.js';

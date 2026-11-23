@@ -7,7 +7,13 @@
     "jsx": "react-jsx",
     "types": ["vite/client"],
     "noEmit": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    /* Web 端直引 core 源码：改 core 立刻热更新，不用先 build 一遍。
+       服务端用的是 core 的 dist 产物（Node 需要真正的 .js），两边各取所需。 */
+    "baseUrl": ".",
+    "paths": {
+      "@grid/core": ["../../packages/core/src/index.ts"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
 }

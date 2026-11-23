@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { sessionUserSchema } from './user';
+import { sessionUserSchema } from './user.js';
 
 /**
  * GET /api/auth/session 的响应。

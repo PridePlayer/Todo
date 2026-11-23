@@ -1,5 +1,7 @@
 import type { SessionUser } from '@grid/core';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSyncStatus } from '../hooks/useSync';
+import { startAutoSync, syncNow, type SyncStatus } from '../sync/engine';
 import { AllTasksView } from '../views/AllTasks';
 import { QuadrantView } from '../views/Quadrant';
 import { Settings } from '../views/Settings';
@@ -41,9 +43,51 @@ function todayLabel(): string {
   }).format(new Date());
 }
 
+/**
+ * 顶栏同步胶囊。
+ *
+ * 文案优先级刻意如此：离线且有待推送 > 同步中 > 失败 > 有待推送 > 已同步。
+ * "离线"必须压过"待同步"——只说"3 条待同步"会让人以为网络正常、只是在排队，
+ * 而用户此刻真正需要知道的是"这些改动一台服务器都没到"。
+ */
+function syncLabel(status: SyncStatus): { text: string; state: string } {
+  if (status.phase === 'syncing') return { text: '同步中…', state: 'busy' };
+  if (status.phase === 'offline') {
+    return {
+      text: status.pending > 0 ? `离线 · ${status.pending} 条待同步` : '离线',
+      state: 'warn',
+    };
+  }
+  if (status.phase === 'error') return { text: status.message ?? '同步失败', state: 'warn' };
+  if (status.pending > 0) return { text: `${status.pending} 条待同步`, state: 'warn' };
+  if (status.failed > 0) return { text: `${status.failed} 条被拒`, state: 'warn' };
+  return { text: '已同步', state: 'ok' };
+}
+
+function SyncPill() {
+  const status = useSyncStatus();
+  const { text, state } = syncLabel(status);
+  return (
+    <button
+      type="button"
+      className={styles.pill}
+      data-state={state}
+      title={status.lastSyncAt ? `上次同步：${new Date(status.lastSyncAt).toLocaleTimeString('zh-CN')}` : '尚未同步'}
+      onClick={() => void syncNow()}
+    >
+      {text}
+    </button>
+  );
+}
+
 export function AppShell({ user, onLogout }: AppShellProps) {
   const [view, setView] = useState<ViewKey>('quadrant');
+  const status = useSyncStatus();
   const active = VIEWS.find((item) => item.key === view) ?? VIEWS[0]!;
+
+  // 自动同步的生命周期跟着登录态走：登出后引擎必须停，否则清空本地库之后
+  // 30 秒心跳还会拿着已失效的会话去撞接口
+  useEffect(() => startAutoSync(), []);
 
   return (
     <div className={styles.shell}>
@@ -71,9 +115,18 @@ export function AppShell({ user, onLogout }: AppShellProps) {
           <h1 className={styles.topTitle}>{active.title}</h1>
           <span className={styles.date}>{todayLabel()}</span>
           <div className={styles.topRight}>
-            <span className={styles.pill} data-state="local">
-              本地 · 未接同步
-            </span>
+            <SyncPill />
+            {status.conflicts > 0 ? (
+              <button
+                type="button"
+                className={styles.pill}
+                data-state="warn"
+                title="字段级冲突待裁决，点开处理"
+                onClick={() => setView('settings')}
+              >
+                {status.conflicts} 处冲突
+              </button>
+            ) : null}
             <span className={styles.email} title={user.email}>
               {user.email}
             </span>

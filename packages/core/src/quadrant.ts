@@ -1,4 +1,4 @@
-import type { Quadrant, Task } from './models/task';
+import type { Quadrant, Task } from './models/task.js';
 
 /**
  * 四象限的编号约定，全项目只认这一套：

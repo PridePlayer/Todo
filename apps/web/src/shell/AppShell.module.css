@@ -106,13 +106,21 @@
 }
 
 .pill {
+  font: inherit;
   font-size: var(--t-xs);
   line-height: var(--lh-xs);
   padding: 2px 8px;
+  background: none;
   border: 1px solid var(--n-300);
   border-radius: var(--r-pill);
   color: var(--n-500);
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.pill:hover {
+  border-color: var(--n-400);
+  color: var(--n-700);
 }
 
 .pill[data-state='ok'] {
@@ -123,6 +131,14 @@
 .pill[data-state='warn'] {
   border-color: var(--warn);
   color: var(--warn);
+}
+
+/* 同步中：用一条沿边框流动的细线表示"正在做事"，不用 spinner——
+   瑞士风格里旋转图标显得轻浮，而且它会让整条顶栏跟着抖 */
+.pill[data-state='busy'] {
+  border-color: var(--a-500);
+  color: var(--a-600);
+  cursor: progress;
 }
 
 .email {

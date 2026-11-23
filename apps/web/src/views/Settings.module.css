@@ -37,6 +37,62 @@
   margin-left: auto;
 }
 
+/* 标题右侧有两个及以上按钮时用这个容器，否则"margin-left:auto"会把第一个按钮推歪 */
+.rowActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.conflictList {
+  margin-top: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--n-200);
+  border: 1px solid var(--n-200);
+}
+
+.conflictList li {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--n-0);
+  font-size: var(--t-sm);
+  line-height: var(--lh-sm);
+  color: var(--n-700);
+  min-width: 0;
+}
+
+.conflictList li > .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 26ch;
+  color: var(--n-600);
+}
+
+.conflictList li > .muted {
+  margin-top: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .conflictList li {
+    flex-wrap: wrap;
+  }
+
+  .conflictList li > .mono {
+    max-width: 100%;
+  }
+}
+
 .lead {
   margin-top: var(--sp-2);
   font-size: var(--t-body);

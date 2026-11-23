@@ -2,6 +2,7 @@ import type { SessionUser } from '@grid/core';
 import { useCallback, useEffect, useState } from 'react';
 import { db } from '../db/dexie';
 import { OutlookPanel } from './OutlookPanel';
+import { SyncPanel } from './SyncPanel';
 import styles from './Settings.module.css';
 
 interface Health {
@@ -143,6 +144,8 @@ export function Settings({ user }: SettingsProps) {
         <p className={styles.muted}>当前账号：{user.email}</p>
       </section>
 
+      <SyncPanel />
+
       <OutlookPanel />
 
       <section className={styles.section}>
@@ -151,7 +154,7 @@ export function Settings({ user }: SettingsProps) {
           <li data-done="true">M0 认证、会话、锁定、迁移、部署脚本</li>
           <li data-done="true">M0b Outlook 授权通道（PKCE + 令牌加密落库）</li>
           <li data-done="true">M1 待办与四象限（纯本地 IndexedDB）</li>
-          <li>M2 同步内核：change_seq、操作队列、冲突解决</li>
+          <li data-done="true">M2 同步内核：change_seq、操作队列、冲突解决</li>
           <li>M3 重复规则与子任务编辑三选项</li>
           <li>M4 Outlook 日历增量同步与回写</li>
         </ul>

@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import type { Db, Row } from './types.js';
+import type { Db, Row, SqlExecutor } from './types.js';
 
 interface ParsedMysqlUrl {
   host: string;
@@ -57,6 +57,43 @@ export function createMysqlDb(raw: string): Db {
 
     async exec(sql: string): Promise<void> {
       await pool.query(sql);
+    },
+
+    async transaction<T>(fn: (tx: SqlExecutor) => Promise<T>): Promise<T> {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        const tx: SqlExecutor = {
+          async query<R>(sql: string, params: readonly unknown[] = []): Promise<R[]> {
+            const [rows] = await conn.query(sql, params as unknown[]);
+            return rows as R[];
+          },
+          async exec(sql: string): Promise<void> {
+            await conn.query(sql);
+          },
+        };
+        const result = await fn(tx);
+        await conn.commit();
+        return result;
+      } catch (error) {
+        try {
+          await conn.rollback();
+        } catch {
+          // 连接已坏时回滚也会失败，保留原始错误
+        }
+        throw error;
+      } finally {
+        conn.release();
+      }
+    },
+
+    async nextSeq(tx: SqlExecutor): Promise<number> {
+      await tx.exec('UPDATE change_seq SET seq = seq + 1 WHERE id = 1');
+      const rows = await tx.query<{ seq: number }>('SELECT seq FROM change_seq WHERE id = 1');
+      // BIGINT 在 mysql2 下可能回传字符串，统一转数字
+      const seq = Number(rows[0]?.seq);
+      if (!Number.isFinite(seq) || seq <= 0) throw new Error('change_seq 未初始化');
+      return seq;
     },
 
     async ping(): Promise<boolean> {

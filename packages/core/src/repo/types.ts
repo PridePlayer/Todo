@@ -1,4 +1,4 @@
-import type { NewTask, Quadrant, Tag, Task, TaskList } from '../models/task';
+import type { NewTask, Quadrant, Tag, Task, TaskList } from '../models/task.js';
 
 /**
  * 仓储接口。
