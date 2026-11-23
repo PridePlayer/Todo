@@ -109,6 +109,32 @@ export function mergeFields(
       continue;
     }
 
+    // ── 打卡数值：取较大值，**绝不相加** ──
+    // 两台设备同一天各点了 1 杯水：本地 3、远端 5。相加会得到 8（看起来今天就喝够了），
+    // 而真值是 5。更糟的是这里没有第二次机会：相加的结果已经写进库，
+    // 下一次同步只会确认 8 是"两边都同意"的值。
+    // 取 max 的代价是"同一天两台设备各加的数可能只算一次"，但这是可解释的少量欠计，
+    // 而相加是不可解释的凭空多计 —— 打卡这种记录宁可少算，不可多算。
+    //
+    // 这段必须放在 remoteUnchanged **之前**：两台设备离线时各自 create 了同一天的同一条
+    // 记录（确定性 id 让它们撞成同一行），第二台的 op 到达时服务端已有行、base 是空的，
+    // 于是 remoteUnchanged 成立。若把 max 规则放在它后面，就会直接采用第二台的值，
+    // 表现为"先打到 5、被离线设备覆盖成 3"——数字反而变小了，而且没有任何提示。
+    if (table === 'habit_log' && field === 'value') {
+      const local = Number(incoming[field] ?? 0);
+      const remote = Number(current[field] ?? 0);
+      if (Number.isFinite(local) && local > remote) applied[field] = local;
+      continue;
+    }
+
+    // ── 补卡标记：真实优先 ──
+    // 同一行一边是当天真打卡、一边是事后补记，取"真打卡"。
+    // 反过来会把真的那天染成斜纹，用户会以为自己记错了。
+    if (table === 'habit_log' && field === 'backfilled') {
+      applied[field] = Boolean(incoming[field]) && Boolean(current[field]);
+      continue;
+    }
+
     const remoteUnchanged = base === undefined || base[field] === undefined || sameValue(current[field], base[field]);
     if (remoteUnchanged) {
       applied[field] = incoming[field];

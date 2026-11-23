@@ -149,6 +149,15 @@ export async function enqueueTableUpdate(
   await enqueueUpdate(id, fields, base, baseRev, table);
 }
 
+/** 通用新建入队（给 task 之外的表用，例如 habit / habit_log） */
+export async function enqueueTableCreate(
+  table: SyncTable,
+  id: string,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  await pushOp({ table, action: 'create', id, baseRev: 0, fields, base: null });
+}
+
 /** 通用软删入队 */
 export async function enqueueTableDelete(table: SyncTable, id: string, baseRev: number): Promise<void> {
   await pushOp({ table, action: 'delete', id, baseRev, fields: {}, base: null });

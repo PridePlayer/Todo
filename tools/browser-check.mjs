@@ -559,6 +559,199 @@ try {
     check('单次事件块存在', false, '未找到 M4 单次会议');
   }
 
+  // 15) M5 打卡：三种类型、连续天数、热力图、完成率
+  //     这一段的断言对应 docs/05 M5 的验收 1~6 条，全部走真实 UI 交互
+  await page.evaluate(`
+    document.querySelector('nav[aria-label="主导航"] button[aria-label="打卡"]')?.click();
+    return true;
+  `);
+  await page.waitUntil(
+    "[...document.querySelectorAll('button')].some(b => b.textContent.trim() === '新建习惯')",
+    10000,
+    '打卡页',
+  );
+
+  const createdHabits = await page.evaluate(`
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    const sSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const byText = (text) => [...document.querySelectorAll('button')].find(b => b.textContent.trim() === text);
+
+    async function make(kind, name, target, unit) {
+      byText('新建习惯')?.click();
+      await sleep(200);
+      const nameInput = document.querySelector('input[aria-label="习惯名称"]');
+      if (!nameInput) return 'no-form';
+      setter.call(nameInput, name);
+      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      const select = document.querySelector('select[aria-label="习惯类型"]');
+      sSetter.call(select, kind);
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(150);
+      if (target) {
+        const t = document.querySelector('input[aria-label="目标值"]');
+        setter.call(t, String(target));
+        t.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (unit) {
+        const u = document.querySelector('input[aria-label="单位"]');
+        setter.call(u, unit);
+        u.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      await sleep(100);
+      byText('创建')?.click();
+      await sleep(450);
+      return 'ok';
+    }
+
+    const results = [
+      await make('check', '验收阅读', null, null),
+      await make('count', '验收喝水', 8, '杯'),
+      await make('duration', '验收冥想', 10, null),
+    ];
+    return results.join(',');
+  `);
+  check('三种类型（打勾/计数/时长）都能创建', createdHabits === 'ok,ok,ok', String(createdHabits));
+
+  const listed = await page.evaluate(`
+    const text = document.body.innerText;
+    return { read: text.includes('验收阅读'), water: text.includes('验收喝水'), med: text.includes('验收冥想') };
+  `);
+  check(
+    '三个习惯都在今日列表里',
+    listed.read === true && listed.water === true && listed.med === true,
+    JSON.stringify(listed),
+  );
+
+  // 验收 1：打勾型点一下 → 已完成、连续天数 1
+  const readDone = await page.evaluate(`
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const row = () => [...document.querySelectorAll('li')].find(li => li.textContent.includes('验收阅读'));
+    row().querySelector('button[aria-label*="今天完成"]')?.click();
+    await sleep(500);
+    const after = row();
+    return {
+      pressed: after.querySelector('button[aria-pressed]')?.getAttribute('aria-pressed'),
+      text: after.innerText.replace(/\\n/g, ' | '),
+    };
+  `);
+  check('打勾型点一下就完成', readDone.pressed === 'true', readDone.text);
+  check('连续天数变成 1 天', String(readDone.text).includes('连续 1 天'), readDone.text);
+
+  // 验收 3：计数型点 3 次显示 3/8
+  const water = await page.evaluate(`
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const row = () => [...document.querySelectorAll('li')].find(li => li.textContent.includes('验收喝水'));
+    for (let i = 0; i < 3; i += 1) {
+      [...row().querySelectorAll('button')].find(b => b.textContent.trim() === '＋1')?.click();
+      await sleep(300);
+    }
+    const after = row();
+    return {
+      text: after.innerText.replace(/\\n/g, ' | '),
+      pressed: after.querySelector('button[aria-pressed]')?.getAttribute('aria-pressed'),
+    };
+  `);
+  check('计数型点 3 次显示 3/8（没有提前算达标）', String(water.text).includes('3/8'), String(water.text));
+  check('计数型没到目标就不打勾', water.pressed === 'false', String(water.pressed));
+
+  // 验收 4：时长型输入 12 分钟 → 12/10 且自动达标
+  const med = await page.evaluate(`
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const row = () => [...document.querySelectorAll('li')].find(li => li.textContent.includes('验收冥想'));
+    [...row().querySelectorAll('button')].find(b => b.textContent.includes('/10'))?.click();
+    await sleep(250);
+    const input = row()?.querySelector('input[name="value"]');
+    if (!input) return { error: 'no-input' };
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(input, '12');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(100);
+    input.closest('form').requestSubmit();
+    await sleep(500);
+    const after = row();
+    return {
+      text: after.innerText.replace(/\\n/g, ' | '),
+      pressed: after.querySelector('button[aria-pressed]')?.getAttribute('aria-pressed'),
+    };
+  `);
+  check('时长型输入 12 分钟记成 12/10', String(med.text).includes('12/10'), String(med.text ?? med.error));
+  check('时长型超过目标即达标', med.pressed === 'true');
+
+  // 验收 2 + 5 + 6：详情页热力图、补记三天、完成率三口径
+  const detail = await page.evaluate(`
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const row = [...document.querySelectorAll('li')].find(li => li.textContent.includes('验收阅读'));
+    [...row.querySelectorAll('button')].find(b => b.textContent.trim() === '详情')?.click();
+    await sleep(500);
+
+    const cells = [...document.querySelectorAll('[role="gridcell"]')];
+    const statOf = (label) => {
+      const el = [...document.querySelectorAll('[class*="statLabel"]')].find(n => n.textContent.trim() === label);
+      return el ? el.parentElement.querySelector('[class*="statValue"]').textContent.trim() : null;
+    };
+
+    // 补记过去 3 天：这三天都是"事后补记"，热力图上要画成空心环
+    const keyOf = (offset) => {
+      const d = new Date();
+      d.setDate(d.getDate() - offset);
+      const pad = (n) => String(n).padStart(2, '0');
+      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    };
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    const dateInput = document.querySelector('input[aria-label="日期"]');
+    const valueInput = document.querySelector('input[aria-label="记录值"]');
+    if (!dateInput || !valueInput) return { error: 'no-backfill-form' };
+
+    for (const offset of [1, 2, 3]) {
+      setter.call(dateInput, keyOf(offset));
+      dateInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(150);
+      setter.call(valueInput, '1');
+      valueInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(100);
+      dateInput.closest('form').requestSubmit();
+      await sleep(350);
+    }
+
+    const rings = [...document.querySelectorAll('[role="gridcell"]')]
+      .filter(el => el.getAttribute('data-backfilled') === 'true' && Number(el.getAttribute('data-level')) >= 3);
+    const solid = [...document.querySelectorAll('[role="gridcell"]')]
+      .filter(el => el.getAttribute('data-backfilled') === 'false' && Number(el.getAttribute('data-level')) >= 3);
+
+    return {
+      cells: cells.length,
+      streak: statOf('当前连续'),
+      longest: statOf('最长连续'),
+      week: statOf('近 7 天'),
+      month: statOf('近 30 天'),
+      all: statOf('全部'),
+      rings: rings.length,
+      solid: solid.length,
+      text: document.body.innerText.replace(/\\n/g, ' | ').slice(0, 400),
+    };
+  `);
+  check('热力图是 12 周 × 7 = 84 格', detail.cells === 84, `${detail.cells} 格`);
+  check('补记 3 天 + 今天 → 连续 4 天', String(detail.streak).startsWith('4'), `${detail.streak} | ${detail.text}`);
+  check('补记的三天画成空心环', detail.rings === 3, `${detail.rings} 个环`);
+  check('当天真打卡是实心（不与补记混淆）', detail.solid === 1, `${detail.solid} 个实心`);
+  check(
+    '完成率三个口径都给出了百分比',
+    /%$/.test(String(detail.week)) && /%$/.test(String(detail.month)) && /%$/.test(String(detail.all)),
+    `7天 ${detail.week} / 30天 ${detail.month} / 全部 ${detail.all}`,
+  );
+
+  if (page.errors.length > 0) {
+    const fresh = page.errors.slice(-3);
+    for (const err of fresh) console.log(`    ! ${String(err).split('\n')[0]}`);
+  }
+
+  await page.evaluate(`
+    [...document.querySelectorAll('button')].find(b => b.textContent.includes('返回'))?.click();
+    return true;
+  `);
+  await new Promise((r) => setTimeout(r, 300));
+
   // 截图：只在 SHOT=1 时保存，用来目视检查排版（自动化断言抓不到"难看"）
   if (process.env.SHOT === '1') {
     // 用桌面尺寸截图：默认窗口是 750x450，会自动落进移动端布局，看不出桌面排版
@@ -575,6 +768,27 @@ try {
     const { writeFileSync } = await import('node:fs');
     writeFileSync('.data/calendar.png', Buffer.from(shot.data, 'base64'));
     console.log('  · 截图已保存 .data/calendar.png');
+
+    // 打卡页单独截一张：热力图的档位与"空心环"只能靠眼睛确认
+    await page.evaluate(`
+      document.querySelector('nav[aria-label="主导航"] button[aria-label="打卡"]')?.click();
+      return true;
+    `);
+    await new Promise((r) => setTimeout(r, 600));
+    const habitShot = await page.send('Page.captureScreenshot', { format: 'png' });
+    writeFileSync('.data/habits.png', Buffer.from(habitShot.data, 'base64'));
+    console.log('  · 截图已保存 .data/habits.png');
+
+    // 详情页：热力图的档位、空心环、月份轴都只能靠眼睛确认
+    await page.evaluate(`
+      const row = [...document.querySelectorAll('li')].find(li => li.textContent.includes('验收阅读'));
+      [...(row?.querySelectorAll('button') ?? [])].find(b => b.textContent.trim() === '详情')?.click();
+      return true;
+    `);
+    await new Promise((r) => setTimeout(r, 700));
+    const detailShot = await page.send('Page.captureScreenshot', { format: 'png' });
+    writeFileSync('.data/habit-detail.png', Buffer.from(detailShot.data, 'base64'));
+    console.log('  · 截图已保存 .data/habit-detail.png');
   }
 
   // 13) 退出前清理日历测试数据（KEEP=1 时保留，方便事后查库）
@@ -603,9 +817,17 @@ try {
     // 系列删了，它的例外也得删，否则验收数据会在服务端留下孤儿
     const junkExceptions = pull.changes.filter(c =>
       c.table === 'recur_exception' && c.deletedAt === null && junkIds.has(c.payload?.seriesId));
-    if (junk.length === 0 && junkExceptions.length === 0) return 0;
+    // 打卡：习惯与它的记录一起删。只删习惯会留下孤儿记录（记录 id 是确定性的，
+    // 永远不会被"同名新习惯"复活），它们会一直占着同步流量却谁也看不见
+    const junkHabits = pull.changes.filter(c =>
+      c.table === 'habit' && c.deletedAt === null && String(c.payload?.name ?? '').startsWith('验收'));
+    const habitIds = new Set(junkHabits.map((c) => c.id));
+    const junkLogs = pull.changes.filter(c =>
+      c.table === 'habit_log' && c.deletedAt === null && habitIds.has(c.payload?.habitId));
+    const all = [...junk, ...junkExceptions, ...junkHabits, ...junkLogs];
+    if (all.length === 0) return 0;
     const now = Date.now();
-    const ops = [...junk, ...junkExceptions].map((c, i) => ({
+    const ops = all.map((c, i) => ({
       opId: 'CL' + now.toString(36).toUpperCase() + i,
       table: c.table, action: 'delete', id: c.id, baseRev: c.rev, fields: {},
       hlc: { wall: now, counter: i, device: '01CLEANUPDEVICE00000000001' },
@@ -615,7 +837,7 @@ try {
       headers: { 'content-type': 'application/json', 'x-csrf-token': s.csrfToken },
       body: JSON.stringify({ deviceId: '01CLEANUPDEVICE00000000001', ops }),
     });
-    return junk.length + junkExceptions.length;
+    return all.length;
   `);
   console.log(`  · 已清理 ${cleaned} 条验收数据`);
   }

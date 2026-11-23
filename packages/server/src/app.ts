@@ -7,6 +7,7 @@ import { HttpError, sendError } from './http/errors.js';
 import type { GraphTokens } from './graph/token.js';
 import { authRoutes } from './routes/auth.js';
 import { calendarRoutes } from './routes/calendar.js';
+import { habitRoutes } from './routes/habits.js';
 import { healthRoutes } from './routes/health.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { syncRoutes } from './routes/sync.js';
@@ -104,6 +105,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(oauthRoutes, { prefix: '/api', db, env });
   await app.register(syncRoutes, { prefix: '/api', db, env });
   await app.register(calendarRoutes, { prefix: '/api', db, env, tokens: deps.tokens ?? null });
+  await app.register(habitRoutes, { prefix: '/api', db, env });
 
   return app;
 }

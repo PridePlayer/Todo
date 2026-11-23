@@ -13,6 +13,7 @@ import type { Db, Row, SqlExecutor } from '../db/types.js';
 import type { AppEnv } from '../env.js';
 import { HttpError } from '../http/errors.js';
 import { enqueueGraphOp } from '../graph/push.js';
+import { checkLogIdentity, clampLogValue, sanitizeHabitFields } from '../sync/habit.js';
 import { mergeFields, normalizeHlc } from '../sync/merge.js';
 import { fieldsToColumns, isKnownField, rowToPayload, type SyncTableName } from '../sync/task-map.js';
 
@@ -21,7 +22,16 @@ interface Deps {
   env: AppEnv;
 }
 
-const TABLES: SyncTableName[] = ['task', 'tag', 'list', 'recur_exception', 'calendar_source', 'cal_event'];
+const TABLES: SyncTableName[] = [
+  'task',
+  'tag',
+  'list',
+  'recur_exception',
+  'calendar_source',
+  'cal_event',
+  'habit',
+  'habit_log',
+];
 
 /**
  * 由服务端 Side 独占写入的表。
@@ -85,6 +95,20 @@ const DEFAULTS: Record<SyncTableName, Record<string, unknown>> = {
     push_attempts: 0,
     last_pushed_at: null,
   },
+  habit: {
+    type: 'check',
+    target: 1,
+    unit: null,
+    days_of_week: null,
+    color_key: 0,
+    sort_order: 0,
+    archived_at: null,
+  },
+  habit_log: {
+    value: 0,
+    backfilled: 0,
+    note: null,
+  },
 };
 
 const REQUIRED: Record<SyncTableName, string | null> = {
@@ -95,6 +119,8 @@ const REQUIRED: Record<SyncTableName, string | null> = {
   // 服务端独占的表不允许新建，这两个值用不到
   calendar_source: null,
   cal_event: null,
+  habit: 'name',
+  habit_log: 'habitId',
 };
 
 /** 表名只来自白名单，绝不能从请求里拼 */
@@ -265,6 +291,32 @@ export async function syncRoutes(app: FastifyInstance, deps: Deps): Promise<void
       if (missing && (op.fields[missing] === undefined || op.fields[missing] === null || op.fields[missing] === '')) {
         return { opId: op.opId, status: 'rejected', reason: `missing_${missing}` };
       }
+
+      // 打卡的两条硬规则，在建行之前收口（见 sync/habit.ts）
+      let createFields = op.fields;
+      if (table === 'habit') {
+        const clean = sanitizeHabitFields(op.fields);
+        if (!clean.ok) return { opId: op.opId, status: 'rejected', reason: clean.reason };
+        createFields = clean.fields;
+      }
+      if (table === 'habit_log') {
+        const identity = checkLogIdentity(op.id, op.fields.habitId, op.fields.logDate);
+        if (!identity.ok) return { opId: op.opId, status: 'rejected', reason: identity.reason };
+        // 习惯不存在 → 这条记录在 UI 里永远不会显示（孤儿）。宁可拒掉，让它出现在
+        // "被拒操作"里被人看见，也不要静默存一条谁也读不到的行
+        const owner = await tx.query<Row>('SELECT id FROM habit WHERE id = ? AND user_id = ? AND deleted_at IS NULL', [
+          identity.habitId,
+          userId,
+        ]);
+        if (owner.length === 0) return { opId: op.opId, status: 'rejected', reason: 'habit_missing' };
+        createFields = {
+          ...op.fields,
+          habitId: identity.habitId,
+          logDate: identity.logDate,
+          value: clampLogValue(op.fields.value),
+        };
+      }
+
       const seq = await db.nextSeq(tx);
       const columns: Record<string, unknown> = {
         id: op.id,
@@ -278,7 +330,7 @@ export async function syncRoutes(app: FastifyInstance, deps: Deps): Promise<void
         hlc_counter: hlc.counter,
         hlc_device: hlc.device,
         ...DEFAULTS[table],
-        ...fieldsToColumns(table, op.fields),
+        ...fieldsToColumns(table, createFields),
       };
       // 物化路径由服务端兜底：客户端没带就退化成 "id/"，绝不存空串（空串会让子树前缀查询失效）
       if (table === 'task' && (columns.path === undefined || columns.path === '')) {
@@ -311,8 +363,22 @@ export async function syncRoutes(app: FastifyInstance, deps: Deps): Promise<void
       if (key === 'id' || !isKnownField(table, key)) continue;
       // syncState 是回写队列的状态位，客户端把它设成 'synced' 就等于"骗"服务端跳过回写
       if (table === 'cal_event' && key === 'syncState') continue;
+      // 打卡记录的身份字段不可改：改了要么撞唯一索引，要么让这条记录"跑到另一个习惯名下"，
+      // 而后者不会报错，只会在另一个习惯的统计里凭空多出一天
+      if (table === 'habit_log' && (key === 'habitId' || key === 'logDate')) continue;
       sanitized[key] = value;
     }
+
+    if (table === 'habit') {
+      const clean = sanitizeHabitFields(sanitized);
+      if (!clean.ok) return { opId: op.opId, status: 'rejected', reason: clean.reason };
+      for (const key of Object.keys(sanitized)) delete sanitized[key];
+      Object.assign(sanitized, clean.fields);
+    }
+    if (table === 'habit_log' && sanitized.value !== undefined) {
+      sanitized.value = clampLogValue(sanitized.value);
+    }
+
 
     const merge = mergeFields(table, {
       base: op.base,

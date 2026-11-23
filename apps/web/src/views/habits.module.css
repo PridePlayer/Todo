@@ -1,0 +1,635 @@
+/* 打卡：列表 + 详情共用一套样式。
+   纪律同其他视图：圆角 ≤ 2px、无阴影、无渐变、颜色只取 token */
+
+.view,
+.detail {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.loading {
+  padding: var(--sp-8) var(--sp-4);
+  font-size: var(--t-sm);
+  color: var(--n-400);
+}
+
+/* ── 头部 ── */
+
+.head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.title {
+  margin-top: var(--sp-1);
+  font-size: var(--t-lg);
+  line-height: var(--lh-lg);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+
+.titleSub {
+  font-size: var(--t-sm);
+  font-weight: 400;
+  color: var(--n-400);
+}
+
+/* ── 按钮 ── */
+
+.primary {
+  height: 28px;
+  padding: 0 var(--sp-3);
+  background: var(--n-900);
+  color: var(--n-0);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  white-space: nowrap;
+}
+
+.primary:hover {
+  background: var(--n-1000);
+}
+
+.primary:disabled {
+  background: var(--n-300);
+  cursor: not-allowed;
+}
+
+.ghost {
+  height: 28px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  color: var(--n-600);
+  white-space: nowrap;
+}
+
+.ghost:hover {
+  border-color: var(--n-500);
+  color: var(--n-900);
+}
+
+.ghost[data-danger='true']:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.mini {
+  height: 26px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  color: var(--n-700);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mini:hover {
+  border-color: var(--a-500);
+  color: var(--a-600);
+}
+
+.mini:disabled {
+  color: var(--n-300);
+  border-color: var(--n-200);
+  cursor: not-allowed;
+}
+
+/* ── 新建表单 ── */
+
+.form {
+  border: var(--line);
+  border-radius: var(--r-sm);
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  background: var(--n-50);
+}
+
+.formRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.formLabel {
+  font-size: var(--t-sm);
+  color: var(--n-500);
+}
+
+.formHint {
+  font-size: var(--t-xs);
+  color: var(--n-400);
+}
+
+.formGrow {
+  flex: 1 1 auto;
+}
+
+.input {
+  flex: 1 1 180px;
+  height: 28px;
+  padding: 0 var(--sp-2);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  background: var(--n-0);
+  color: var(--n-900);
+  min-width: 0;
+}
+
+.input:focus,
+.dateInput:focus,
+.select:focus,
+.number:focus,
+.unitInput:focus {
+  outline: none;
+  border-color: var(--a-500);
+}
+
+/* 日期框单独限宽：它天生比别的输入宽（浏览器要给日历按钮留位置），
+   用 .input 的 flex:1 会被拉到半行宽，看起来像"补记表单少了一个字段" */
+.dateInput {
+  flex: 0 0 auto;
+  width: 150px;
+  height: 28px;
+  padding: 0 var(--sp-2);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  background: var(--n-0);
+  color: var(--n-900);
+}
+
+.select {
+  height: 28px;
+  padding: 0 var(--sp-2);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  background: var(--n-0);
+  font-size: var(--t-sm);
+  color: var(--n-700);
+}
+
+.number {
+  width: 64px;
+  height: 28px;
+  padding: 0 var(--sp-2);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  background: var(--n-0);
+  color: var(--n-900);
+}
+
+.unitInput {
+  width: 52px;
+  height: 28px;
+  padding: 0 var(--sp-1);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  background: var(--n-0);
+  text-align: center;
+}
+
+.days {
+  display: flex;
+  gap: 1px;
+}
+
+.dayChip {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--n-200);
+  font-size: var(--t-sm);
+  color: var(--n-500);
+  background: var(--n-0);
+}
+
+.dayChip[data-on='true'] {
+  background: var(--n-900);
+  border-color: var(--n-900);
+  color: var(--n-0);
+}
+
+/* ── 今日列表 ── */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  border-top: var(--line);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-1);
+  border-bottom: var(--line);
+}
+
+.row[data-off='true'] {
+  /* 今天不必做：整行压暗，但不隐藏——用户可能想做，也可能想改排期 */
+  opacity: 0.62;
+}
+
+.mark {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+  font-size: var(--t-sm);
+  line-height: 1;
+  color: var(--n-0);
+}
+
+.mark:hover {
+  border-color: var(--a-500);
+}
+
+.mark[aria-pressed='true'] {
+  background: var(--a-500);
+  border-color: var(--a-500);
+}
+
+.main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.name {
+  text-align: left;
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  color: var(--n-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name:hover {
+  color: var(--a-600);
+}
+
+.row[data-done='true'] .name {
+  color: var(--n-500);
+  text-decoration: line-through;
+  text-decoration-color: var(--n-300);
+}
+
+.meta {
+  font-size: var(--t-xs);
+  line-height: var(--lh-xs);
+  color: var(--n-400);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  gap: 0 var(--sp-1);
+  padding: 2px var(--sp-1);
+  border-radius: var(--r-sm);
+}
+
+.progress:hover {
+  background: var(--n-100);
+}
+
+.num {
+  font-size: var(--t-body);
+  color: var(--n-900);
+  font-variant-numeric: tabular-nums;
+}
+
+.slash {
+  color: var(--n-400);
+}
+
+.unit {
+  font-size: var(--t-xs);
+  color: var(--n-500);
+}
+
+.progressText {
+  font-size: var(--t-sm);
+  color: var(--n-500);
+  white-space: nowrap;
+}
+
+.bar {
+  grid-column: 1 / -1;
+  width: 88px;
+  height: 2px;
+  background: var(--n-200);
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  background: var(--a-500);
+}
+
+.valueForm {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.empty {
+  padding: var(--sp-8) var(--sp-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.emptyTitle {
+  font-size: var(--t-md);
+  color: var(--n-900);
+}
+
+.emptyHint {
+  font-size: var(--t-sm);
+  line-height: var(--lh-body);
+  color: var(--n-500);
+  max-width: 46ch;
+}
+
+.archiveBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.archiveToggle {
+  align-self: flex-start;
+  font-size: var(--t-sm);
+  color: var(--n-500);
+  border-bottom: 1px dashed var(--n-300);
+}
+
+.archiveToggle:hover {
+  color: var(--n-900);
+}
+
+.archiveList {
+  display: flex;
+  flex-direction: column;
+  border-top: var(--line);
+}
+
+.archiveRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-1);
+  border-bottom: var(--line);
+}
+
+.archiveName {
+  font-size: var(--t-sm);
+  color: var(--n-500);
+}
+
+.footNote {
+  font-size: var(--t-xs);
+  line-height: var(--lh-sm);
+  color: var(--n-400);
+  max-width: 60ch;
+}
+
+/* ── 详情 ── */
+
+.detailHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.back {
+  font-size: var(--t-sm);
+  color: var(--n-600);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  padding: 3px 8px;
+}
+
+.back:hover {
+  border-color: var(--n-500);
+  color: var(--n-900);
+}
+
+.detailTitleBox {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.detailTitle {
+  font-size: var(--t-lg);
+  line-height: var(--lh-lg);
+  letter-spacing: -0.01em;
+}
+
+.detailActions {
+  display: flex;
+  gap: var(--sp-1);
+}
+
+.statRow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: var(--line);
+  border-radius: var(--r-sm);
+}
+
+.stat {
+  padding: var(--sp-2) var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-right: var(--line);
+  min-width: 0;
+}
+
+.stat:last-child {
+  border-right: 0;
+}
+
+.statLabel {
+  font-size: var(--t-xs);
+  color: var(--n-400);
+}
+
+.statValue {
+  font-size: var(--t-lg);
+  line-height: var(--lh-lg);
+  color: var(--n-900);
+  font-variant-numeric: tabular-nums;
+}
+
+.statUnit {
+  font-size: var(--t-xs);
+  color: var(--n-400);
+  margin-left: 2px;
+}
+
+.statHint {
+  font-size: var(--t-xs);
+  color: var(--n-400);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.blockTitle {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--n-700);
+  letter-spacing: 0.02em;
+}
+
+.recordForm {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.error {
+  font-size: var(--t-sm);
+  color: var(--danger);
+}
+
+.recordList {
+  display: flex;
+  flex-direction: column;
+  border-top: var(--line);
+}
+
+.recordRow {
+  display: grid;
+  grid-template-columns: 96px 80px 56px 44px 1fr;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) 0;
+  border-bottom: var(--line);
+  font-size: var(--t-sm);
+}
+
+.recordDate {
+  text-align: left;
+  color: var(--n-700);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  gap: var(--sp-1);
+  align-items: baseline;
+}
+
+.recordDate:hover {
+  color: var(--a-600);
+}
+
+.recordWeekday {
+  font-size: var(--t-xs);
+  color: var(--n-400);
+}
+
+.recordValue {
+  color: var(--n-900);
+  font-variant-numeric: tabular-nums;
+}
+
+.recordFlag {
+  font-size: var(--t-xs);
+  color: var(--n-400);
+}
+
+.recordFlag[data-on='true'] {
+  color: var(--a-600);
+}
+
+.recordBackfill {
+  font-size: var(--t-xs);
+  color: var(--n-500);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  padding: 0 4px;
+  justify-self: start;
+}
+
+.recordRow .ghost {
+  justify-self: end;
+  height: 24px;
+}
+
+@media (max-width: 720px) {
+  .row {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    row-gap: var(--sp-1);
+  }
+
+  .actions {
+    grid-column: 2 / -1;
+    justify-content: flex-end;
+  }
+
+  .statRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stat:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .recordRow {
+    grid-template-columns: 88px 1fr auto;
+  }
+
+  .recordFlag,
+  .recordBackfill {
+    display: none;
+  }
+}

@@ -4,11 +4,12 @@ import { useSyncStatus } from '../hooks/useSync';
 import { startAutoSync, syncNow, type SyncStatus } from '../sync/engine';
 import { AllTasksView } from '../views/AllTasks';
 import { CalendarView } from '../views/calendar/CalendarView';
+import { HabitsView } from '../views/Habits';
 import { QuadrantView } from '../views/Quadrant';
 import { Settings } from '../views/Settings';
 import styles from './AppShell.module.css';
 
-type ViewKey = 'quadrant' | 'calendar' | 'all' | 'settings';
+type ViewKey = 'quadrant' | 'calendar' | 'habits' | 'all' | 'settings';
 
 const VIEWS: { key: ViewKey; label: string; title: string; path: string }[] = [
   {
@@ -22,6 +23,13 @@ const VIEWS: { key: ViewKey; label: string; title: string; path: string }[] = [
     label: '日历',
     title: '日历',
     path: 'M4 6h16v14H4zM4 10h16M9 3v4M15 3v4',
+  },
+  {
+    key: 'habits',
+    label: '打卡',
+    title: '打卡',
+    // 圆圈 + 勾：打卡的语义是"今天这一格被填上了"，不是"完成了一件事"
+    path: 'M12 21a9 9 0 100-18 9 9 0 000 18zM8.2 12.4l2.6 2.6 5-5.4',
   },
   {
     key: 'all',
@@ -146,6 +154,7 @@ export function AppShell({ user, onLogout }: AppShellProps) {
         <main className={styles.content}>
           {view === 'quadrant' ? <QuadrantView /> : null}
           {view === 'calendar' ? <CalendarView /> : null}
+          {view === 'habits' ? <HabitsView /> : null}
           {view === 'all' ? <AllTasksView /> : null}
           {view === 'settings' ? <Settings user={user} /> : null}
         </main>

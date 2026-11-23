@@ -1,7 +1,11 @@
 import {
   ApiError,
+  dateKeyInZone,
   type CalEvent,
   type CalendarSource,
+  type Habit,
+  type HabitLog,
+  type HabitType,
   type Quadrant,
   type RecurException,
   type SyncChange,
@@ -320,6 +324,16 @@ async function bumpRev(table: SyncTable, id: string, rev: number): Promise<void>
     if (row) await db.events.put({ ...row, rev });
     return;
   }
+  if (table === 'habit') {
+    const row = await db.habits.get(id);
+    if (row) await db.habits.put({ ...row, rev });
+    return;
+  }
+  if (table === 'habit_log') {
+    const row = await db.habitLogs.get(id);
+    if (row) await db.habitLogs.put({ ...row, rev });
+    return;
+  }
   // tag / list 的模型里没有 rev，本地也不需要——只有 task 会带着 baseRev 做字段级合并
 }
 
@@ -389,6 +403,31 @@ async function applyPayload(
     }
     if (!payload) return;
     await db.sources.put(toSource(id, rev, payload));
+    return;
+  }
+
+  if (table === 'habit') {
+    const row = await db.habits.get(id);
+    if (deletedAt !== null) {
+      if (row) await db.habits.put({ ...row, deletedAt, rev });
+      return;
+    }
+    if (!payload) return;
+    await db.habits.put(toHabit(id, rev, payload, deletedAt));
+    return;
+  }
+
+  if (table === 'habit_log') {
+    // 记录同样保留墓碑（不物理删除）：id 是 hash(habitId + logDate) 算出来的，
+    // 物理删掉之后"同一天再补一次卡"会以同一个 id 重新 create，
+    // 服务端会说"这行已经存在"，然后本地就永远缺这一行——症状是点了没反应
+    const row = await db.habitLogs.get(id);
+    if (deletedAt !== null) {
+      if (row) await db.habitLogs.put({ ...row, deletedAt, rev });
+      return;
+    }
+    if (!payload) return;
+    await db.habitLogs.put(toHabitLog(id, rev, payload, deletedAt));
     return;
   }
 
@@ -482,6 +521,49 @@ function toCalEvent(id: string, rev: number, payload: Record<string, unknown>, d
   };
 }
 
+/** 线上 payload → 本地 Habit。逐字段兜底，理由同 toTask */
+function toHabit(id: string, rev: number, payload: Record<string, unknown>, deletedAt: number | null): Habit {
+  const now = Date.now();
+  const type: HabitType = payload.type === 'count' || payload.type === 'duration' ? payload.type : 'check';
+  const rawTarget = Math.trunc(Number(payload.target ?? 0));
+  return {
+    id,
+    name: (str(payload.name) ?? '未命名习惯').slice(0, 128),
+    type,
+    // target 为 0 会让完成率的分母变成 0（界面上是 NaN%），这里兜成 1
+    target: type === 'check' ? 1 : rawTarget > 0 ? rawTarget : 1,
+    unit: str(payload.unit),
+    daysOfWeek: Array.isArray(payload.daysOfWeek)
+      ? [...new Set(payload.daysOfWeek.map(Number))].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort((a, b) => a - b)
+      : [],
+    colorKey: clampColor(Number(payload.colorKey ?? 0)),
+    sortOrder: Number(payload.sortOrder ?? 0) || 0,
+    archivedAt: numOrNull(payload.archivedAt),
+    createdAt: numOrNull(payload.createdAt) ?? now,
+    updatedAt: numOrNull(payload.updatedAt) ?? now,
+    deletedAt,
+    rev: rev > 0 ? rev : 1,
+  };
+}
+
+/** 线上 payload → 本地 HabitLog。logDate 是身份的一部分，非法时按"今天"兜底而不是丢掉整行 */
+function toHabitLog(id: string, rev: number, payload: Record<string, unknown>, deletedAt: number | null): HabitLog {
+  const now = Date.now();
+  const raw = String(payload.logDate ?? '');
+  return {
+    id,
+    habitId: str(payload.habitId) ?? '',
+    logDate: /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : dateKeyInZone(now),
+    value: Math.max(0, Number(payload.value ?? 0) || 0),
+    backfilled: Boolean(payload.backfilled),
+    note: str(payload.note),
+    createdAt: numOrNull(payload.createdAt) ?? now,
+    updatedAt: numOrNull(payload.updatedAt) ?? now,
+    deletedAt,
+    rev: rev > 0 ? rev : 1,
+  };
+}
+
 function toSource(id: string, rev: number, payload: Record<string, unknown>): CalendarSource {
   const now = Date.now();
   return {
@@ -537,14 +619,20 @@ function toException(id: string, rev: number, payload: Record<string, unknown>, 
 
 async function clearLocalData(): Promise<void> {
   // 表超过 5 张时用数组形式：Dexie 的位置参数重载最多 5 张表 + 回调
-  await db.transaction('rw', [db.tasks, db.tags, db.lists, db.exceptions, db.events, db.sources], async () => {
-    await db.tasks.clear();
-    await db.tags.clear();
-    await db.lists.clear();
-    await db.exceptions.clear();
-    await db.events.clear();
-    await db.sources.clear();
-  });
+  await db.transaction(
+    'rw',
+    [db.tasks, db.tags, db.lists, db.exceptions, db.events, db.sources, db.habits, db.habitLogs],
+    async () => {
+      await db.tasks.clear();
+      await db.tags.clear();
+      await db.lists.clear();
+      await db.exceptions.clear();
+      await db.events.clear();
+      await db.sources.clear();
+      await db.habits.clear();
+      await db.habitLogs.clear();
+    },
+  );
 }
 
 /**

@@ -24,7 +24,16 @@ export type Hlc = z.infer<typeof hlcSchema>;
  * 顺序就是 pull 时逐表取数的顺序，也是"表名 = 服务端物理表名"的约定——
  * 别在这里加别名，`SELECT * FROM ${table}` 是直接拼的（表名只来自这个白名单）。
  */
-export const SYNC_TABLES = ['task', 'tag', 'list', 'recur_exception', 'calendar_source', 'cal_event'] as const;
+export const SYNC_TABLES = [
+  'task',
+  'tag',
+  'list',
+  'recur_exception',
+  'calendar_source',
+  'cal_event',
+  'habit',
+  'habit_log',
+] as const;
 export type SyncTable = (typeof SYNC_TABLES)[number];
 
 export const SYNC_ACTIONS = ['create', 'update', 'delete'] as const;

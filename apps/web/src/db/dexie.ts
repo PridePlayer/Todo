@@ -1,5 +1,15 @@
 import Dexie, { type Table } from 'dexie';
-import type { CalEvent, CalendarSource, RecurException, SyncTable, Tag, Task, TaskList } from '@grid/core';
+import type {
+  CalEvent,
+  CalendarSource,
+  Habit,
+  HabitLog,
+  RecurException,
+  SyncTable,
+  Tag,
+  Task,
+  TaskList,
+} from '@grid/core';
 
 /**
  * 本地操作队列的一条记录。
@@ -65,6 +75,8 @@ export class GridDB extends Dexie {
   exceptions!: Table<RecurException, string>;
   events!: Table<CalEvent, string>;
   sources!: Table<CalendarSource, string>;
+  habits!: Table<Habit, string>;
+  habitLogs!: Table<HabitLog, string>;
 
   constructor() {
     super('grid');
@@ -105,6 +117,21 @@ export class GridDB extends Dexie {
       events: 'id, sourceId, startAt, endAt, deletedAt',
       sources: 'id, sortOrder, deletedAt',
     });
+    // v5：打卡。habitLogs 的复合索引 [habitId+logDate] 是详情页的主查询——
+    // 一个习惯一年 365 行，按 habitId 取全部再内存过滤会随年数线性变慢
+    this.version(5).stores({
+      tasks: 'id, parentId, quadrant, completedAt, dueDate, path, sortOrder, deletedAt, listId',
+      tags: 'id, &name',
+      lists: 'id, sortOrder',
+      outbox: 'opId, status, createdAt, id',
+      meta: 'key',
+      conflicts: 'id, taskId, createdAt',
+      exceptions: 'id, seriesId, originalStart, kind, deletedAt',
+      events: 'id, sourceId, startAt, endAt, deletedAt',
+      sources: 'id, sortOrder, deletedAt',
+      habits: 'id, sortOrder, archivedAt, deletedAt',
+      habitLogs: 'id, habitId, logDate, deletedAt, [habitId+logDate]',
+    });
     this.tasks = this.table('tasks');
     this.tags = this.table('tags');
     this.lists = this.table('lists');
@@ -114,6 +141,8 @@ export class GridDB extends Dexie {
     this.exceptions = this.table('exceptions');
     this.events = this.table('events');
     this.sources = this.table('sources');
+    this.habits = this.table('habits');
+    this.habitLogs = this.table('habitLogs');
   }
 }
 

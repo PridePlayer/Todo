@@ -159,8 +159,10 @@ export function Settings({ user }: SettingsProps) {
           <li data-done="true">M1 待办与四象限（纯本地 IndexedDB）</li>
           <li data-done="true">M2 同步内核：change_seq、操作队列、冲突解决</li>
           <li data-done="true">M3 自建日历：日/周/月/列表 + 重复规则三选项</li>
-          <li>M4 Outlook 日历增量同步与回写</li>
-          <li>M5 每日打卡与甘特</li>
+          <li data-done="true">M4 Outlook 日历：按日历 delta 增量 + 单次事件回写</li>
+          <li data-done="true">M5 每日打卡：三种类型、连续天数、热力图、补卡</li>
+          <li>M6 Android App（离线建任务 + 本地提醒）</li>
+          <li>M7 甘特只读 + 打磨 + 备份</li>
         </ul>
       </section>
     </div>

@@ -1,0 +1,149 @@
+/* 热力图：12 列 × 7 行的小方格阵列
+   格子尺寸写死 14px（+3px 间隙），不随容器拉伸——
+   拉伸会让"这周有几天做满"整体变形，而热力图读的就是形状 */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.inner {
+  display: grid;
+  grid-template-columns: 18px auto;
+  grid-template-rows: 14px auto;
+  gap: var(--sp-1) var(--sp-1);
+  width: max-content;
+}
+
+.corner {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.months {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 12), 14px);
+  gap: 3px;
+}
+
+.month {
+  font-size: var(--t-xs);
+  line-height: 14px;
+  color: var(--n-400);
+  white-space: nowrap;
+  /* 月份标签只在有 1 号的那列出现，文字必然比格子宽，允许溢出到右侧 */
+  overflow: visible;
+}
+
+.days {
+  grid-column: 1;
+  grid-row: 2;
+  display: grid;
+  grid-template-rows: repeat(7, 14px);
+  gap: 3px;
+}
+
+.day {
+  font-size: 9px;
+  line-height: 14px;
+  color: var(--n-400);
+  text-align: left;
+}
+
+.grid {
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 14px);
+  grid-auto-columns: 14px;
+  gap: 3px;
+}
+
+.cell {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--n-100);
+  display: block;
+}
+
+button.cell {
+  cursor: pointer;
+}
+
+/* 五档：从"什么都没有"到"超额"，中间三档是同一族蓝色 */
+.cell[data-level='0'] {
+  background: var(--n-100);
+}
+
+.cell[data-level='1'] {
+  background: var(--a-100);
+}
+
+.cell[data-level='2'] {
+  background: var(--a-200);
+}
+
+.cell[data-level='3'] {
+  background: var(--a-500);
+}
+
+.cell[data-level='4'] {
+  background: var(--a-700);
+}
+
+/* 不在排期且没记录：再淡一档。看着"几乎空"但不等于"断了"。
+   必须限定在 level 0 —— 否则"周二本来不该做但真做了"会被压成空白，
+   而那种"计划外的达成"恰恰是热力图里最值得看见的东西 */
+.cell[data-level='0'][data-scheduled='false'] {
+  background: var(--n-50);
+}
+
+/* 补卡：空心环。用 outline 而不是渐变斜纹——设计规范禁止渐变，
+   而且 14px 上的斜纹根本认不出来，环一眼就能分辨 */
+.cell[data-backfilled='true'][data-level='1'],
+.cell[data-backfilled='true'][data-level='2'],
+.cell[data-backfilled='true'][data-level='3'],
+.cell[data-backfilled='true'][data-level='4'] {
+  outline: 1px solid var(--n-0);
+  outline-offset: -3px;
+}
+
+/* 将来：虚线框，不可点 */
+.cell[data-future='true'] {
+  background: transparent;
+  outline: 1px dashed var(--n-200);
+  outline-offset: -1px;
+}
+
+.cell[data-selected='true'] {
+  outline: 1px solid var(--n-900);
+  outline-offset: 1px;
+}
+
+button.cell:focus-visible {
+  outline: 2px solid var(--a-500);
+  outline-offset: 1px;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.legendText {
+  font-size: var(--t-xs);
+  color: var(--n-400);
+  line-height: 14px;
+}
+
+.legendGap {
+  width: var(--sp-2);
+}

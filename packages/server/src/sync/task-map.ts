@@ -116,6 +116,48 @@ const CAL_EVENT_FIELDS: Record<string, FieldSpec> = {
   rev: { col: 'rev', kind: 'raw' },
 };
 
+const HABIT_FIELDS: Record<string, FieldSpec> = {
+  id: { col: 'id', kind: 'raw' },
+  name: { col: 'name', kind: 'raw' },
+  type: { col: 'type', kind: 'raw' },
+  target: { col: 'target', kind: 'raw' },
+  unit: { col: 'unit', kind: 'raw' },
+  // 数组存 JSON 文本：加"每月 1 号"这类规则时不用改表结构
+  daysOfWeek: { col: 'days_of_week', kind: 'json' },
+  colorKey: { col: 'color_key', kind: 'raw' },
+  sortOrder: { col: 'sort_order', kind: 'raw' },
+  archivedAt: { col: 'archived_at', kind: 'raw' },
+  createdAt: { col: 'created_at', kind: 'raw' },
+  updatedAt: { col: 'updated_at', kind: 'raw' },
+  deletedAt: { col: 'deleted_at', kind: 'raw' },
+  rev: { col: 'rev', kind: 'raw' },
+};
+
+/**
+ * 打卡记录。
+ *
+ * 与 habit 分两张表而不是塞一个 JSON 列：
+ *   - 记录是**每天一行**，一年就是 365 行；塞进 JSON 会让"改一个数字"抬高整个人 habit 的 rev，
+ *     两端看到的是"整行变了"，字段级合并无从下手，于是每次都报假冲突。
+ *   - 记录要能单独软删、单独记冲突账。
+ *
+ * 注意这里没有 logDate 之外的"日期派生字段"：连续天数、完成率、热力图全部在应用层
+ * 从 log_date 现算，绝不存累加值——存了累加值，删一条记录就得记得回退，而漏回退的
+ * 症状是"删了记录连续天数不变"，用户会认为数据没删掉。
+ */
+const HABIT_LOG_FIELDS: Record<string, FieldSpec> = {
+  id: { col: 'id', kind: 'raw' },
+  habitId: { col: 'habit_id', kind: 'raw' },
+  logDate: { col: 'log_date', kind: 'raw' },
+  value: { col: 'value', kind: 'raw' },
+  backfilled: { col: 'backfilled', kind: 'bool' },
+  note: { col: 'note', kind: 'raw' },
+  createdAt: { col: 'created_at', kind: 'raw' },
+  updatedAt: { col: 'updated_at', kind: 'raw' },
+  deletedAt: { col: 'deleted_at', kind: 'raw' },
+  rev: { col: 'rev', kind: 'raw' },
+};
+
 export const FIELD_MAPS = {
   task: TASK_FIELDS,
   tag: TAG_FIELDS,
@@ -123,6 +165,8 @@ export const FIELD_MAPS = {
   recur_exception: EXCEPTION_FIELDS,
   calendar_source: SOURCE_FIELDS,
   cal_event: CAL_EVENT_FIELDS,
+  habit: HABIT_FIELDS,
+  habit_log: HABIT_LOG_FIELDS,
 } as const;
 
 export type SyncTableName = keyof typeof FIELD_MAPS;

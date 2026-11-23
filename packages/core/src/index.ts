@@ -138,6 +138,51 @@ export {
 } from './time.js';
 
 export {
+  HABIT_TYPES,
+  habitSchema,
+  newHabitSchema,
+  defaultTarget,
+  habitUnit,
+  type Habit,
+  type HabitType,
+  type NewHabit,
+} from './models/habit.js';
+
+export {
+  habitLogSchema,
+  reached,
+  progressOf,
+  type HabitLog,
+} from './models/habit-log.js';
+
+export {
+  dayNumber,
+  dateKeyOfDayNumber,
+  addDaysKey,
+  daysBetween,
+  isDateKey,
+  weekdayOfKey,
+  eachDayKey,
+  isScheduled,
+  weekStartKey,
+} from './habit/date.js';
+
+export { habitLogId, isHabitLogId } from './habit/log-id.js';
+
+export { computeStreak, type StreakInfo } from './habit/streak.js';
+
+export { completionRate, rateBuckets, formatRate, type RateInfo } from './habit/rate.js';
+
+export {
+  levelOf,
+  heatmapWeeks,
+  countReached,
+  type HeatLevel,
+  type HeatCell,
+  type HeatInput,
+} from './habit/heatmap.js';
+
+export {
   parseRrule,
   formatRrule,
   rruleFromPreset,
