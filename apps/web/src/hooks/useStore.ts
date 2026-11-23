@@ -1,4 +1,4 @@
-import type { CalEvent, CalendarSource, Habit, HabitLog, Tag, Task } from '@grid/core';
+import type { CalEvent, CalendarSource, Habit, HabitLog, Tag, Task, TaskList } from '@grid/core';
 import { liveQuery } from 'dexie';
 import { useEffect, useState } from 'react';
 import { db } from '../db/dexie';
@@ -120,6 +120,26 @@ export function useHabitLogs(): HabitLog[] | null {
     const sub = liveQuery(() => db.habitLogs.filter((row) => row.deletedAt === null).toArray()).subscribe({
       next: (items) => setRows(items),
       error: (err: unknown) => console.error('[liveQuery:habitLogs]', err),
+    });
+    return () => sub.unsubscribe();
+  }, []);
+
+  return rows;
+}
+
+/**
+ * 清单（含收件箱）。
+ *
+ * `repo.lists()` 自己会保证收件箱永远存在，所以这里不做兜底 —— 兜底写两遍，
+ * 哪天规则改成"收件箱可删"，两份兜底里必然只改一处。
+ */
+export function useLists(): TaskList[] | null {
+  const [rows, setRows] = useState<TaskList[] | null>(null);
+
+  useEffect(() => {
+    const sub = liveQuery(() => repo.lists()).subscribe({
+      next: (items) => setRows(items),
+      error: (err: unknown) => console.error('[liveQuery:lists]', err),
     });
     return () => sub.unsubscribe();
   }, []);

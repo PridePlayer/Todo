@@ -18,7 +18,9 @@
     "seed:user": "pnpm --filter @grid/server seed:user",
     "reset:password": "pnpm --filter @grid/server reset:password",
     "healthcheck": "curl -fsS http://127.0.0.1:3000/api/healthz",
-    "build:core": "pnpm --filter @grid/core build"
+    "build:core": "pnpm --filter @grid/core build",
+    "mobile": "pnpm --filter @grid/mobile start",
+    "mobile:check": "pnpm --filter @grid/mobile typecheck"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

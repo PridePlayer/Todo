@@ -1,0 +1,185 @@
+import type { SyncChange, SyncOp } from '@grid/core';
+import * as SQLite from 'expo-sqlite';
+
+/**
+ * 本地库。
+ *
+ * 不是把 Web 的 Dexie repo 照抄一遍 —— 这里存的是"服务端行的镜像 + 待推队列"，
+ * 而不是带业务语义的仓储。原因：移动端第一版不做字段级合并，
+ * 冲突一律以服务端结果为准；既然不做合并，就不需要把 repo 的 600 行搬过来。
+ *
+ * 三张表：
+ *   doc    —— 每行一个 JSON，主键 (表名, id)，含墓碑
+ *   meta   —— 游标等标量
+ *   outbox —— 尚未推送成功的操作（离线时全靠它）
+ */
+
+export const TABLES = [
+  'task',
+  'tag',
+  'list',
+  'recur_exception',
+  'calendar_source',
+  'cal_event',
+  'habit',
+  'habit_log',
+] as const;
+
+export type RowTable = (typeof TABLES)[number];
+
+export interface DocRow {
+  tbl: RowTable;
+  id: string;
+  rev: number;
+  deletedAt: number | null;
+  payload: Record<string, unknown>;
+}
+
+export interface QueuedOp {
+  opId: string;
+  body: SyncOp;
+  createdAt: number;
+}
+
+let db: SQLite.SQLiteDatabase | null = null;
+
+export async function openDb(): Promise<SQLite.SQLiteDatabase> {
+  if (db) return db;
+  db = await SQLite.openDatabaseAsync('grid.db');
+  await db.execAsync(`
+    PRAGMA journal_mode = WAL;
+    CREATE TABLE IF NOT EXISTS doc (
+      tbl     TEXT    NOT NULL,
+      id      TEXT    NOT NULL,
+      rev     INTEGER NOT NULL,
+      deleted INTEGER NOT NULL,
+      payload TEXT    NOT NULL,
+      PRIMARY KEY (tbl, id)
+    );
+    CREATE TABLE IF NOT EXISTS meta (
+      k TEXT PRIMARY KEY,
+      v TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS outbox (
+      op_id      TEXT PRIMARY KEY,
+      body       TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+  `);
+  return db;
+}
+
+interface DocSqlRow {
+  tbl: string;
+  id: string;
+  rev: number;
+  deleted: number;
+  payload: string;
+}
+
+export async function loadAll(): Promise<DocRow[]> {
+  const conn = await openDb();
+  const rows = await conn.getAllAsync<DocSqlRow>('SELECT tbl, id, rev, deleted, payload FROM doc');
+  const out: DocRow[] = [];
+  for (const row of rows) {
+    if (!isTable(row.tbl)) continue;
+    let payload: Record<string, unknown> = {};
+    try {
+      payload = JSON.parse(row.payload) as Record<string, unknown>;
+    } catch {
+      // 单行坏了不该让整个首屏空白：丢掉这一行，下次 pull 会重新写回
+      continue;
+    }
+    out.push({ tbl: row.tbl, id: row.id, rev: row.rev, deletedAt: row.deleted ? 0 : null, payload });
+  }
+  return out;
+}
+
+export async function applyChanges(changes: readonly SyncChange[]): Promise<void> {
+  if (changes.length === 0) return;
+  const conn = await openDb();
+  await conn.withTransactionAsync(async () => {
+    for (const change of changes) {
+      if (!isTable(change.table)) continue;
+      // 墓碑也写：不写的话，增量拉取里"删除"这条信息就丢了，
+      // 界面上会一直留着一条已经不存在的事件（Web 端踩过这个坑）
+      await conn.runAsync(
+        'INSERT OR REPLACE INTO doc (tbl, id, rev, deleted, payload) VALUES (?, ?, ?, ?, ?)',
+        [
+          change.table,
+          change.id,
+          change.rev,
+          change.deletedAt === null ? 0 : 1,
+          JSON.stringify(change.payload ?? {}),
+        ],
+      );
+    }
+  });
+}
+
+/** 本地先落一行（乐观写入，不等服务端） */
+export async function putRow(tbl: RowTable, id: string, rev: number, payload: Record<string, unknown>): Promise<void> {
+  const conn = await openDb();
+  await conn.runAsync(
+    'INSERT OR REPLACE INTO doc (tbl, id, rev, deleted, payload) VALUES (?, ?, ?, 0, ?)',
+    [tbl, id, rev, JSON.stringify(payload)],
+  );
+}
+
+export async function bumpRev(tbl: RowTable, id: string, rev: number): Promise<void> {
+  const conn = await openDb();
+  await conn.runAsync('UPDATE doc SET rev = ? WHERE tbl = ? AND id = ?', [rev, tbl, id]);
+}
+
+export async function getMeta(key: string): Promise<string | null> {
+  const conn = await openDb();
+  const row = await conn.getFirstAsync<{ v: string }>('SELECT v FROM meta WHERE k = ?', [key]);
+  return row?.v ?? null;
+}
+
+export async function setMeta(key: string, value: string): Promise<void> {
+  const conn = await openDb();
+  await conn.runAsync('INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)', [key, value]);
+}
+
+export async function queueOp(op: SyncOp): Promise<void> {
+  const conn = await openDb();
+  await conn.runAsync('INSERT OR REPLACE INTO outbox (op_id, body, created_at) VALUES (?, ?, ?)', [
+    op.opId,
+    JSON.stringify(op),
+    Date.now(),
+  ]);
+}
+
+export async function loadOps(): Promise<QueuedOp[]> {
+  const conn = await openDb();
+  const rows = await conn.getAllAsync<{ op_id: string; body: string; created_at: number }>(
+    'SELECT op_id, body, created_at FROM outbox ORDER BY created_at ASC',
+  );
+  const out: QueuedOp[] = [];
+  for (const row of rows) {
+    try {
+      out.push({ opId: row.op_id, body: JSON.parse(row.body) as SyncOp, createdAt: row.created_at });
+    } catch {
+      await conn.runAsync('DELETE FROM outbox WHERE op_id = ?', [row.op_id]);
+    }
+  }
+  return out;
+}
+
+export async function dropOps(opIds: readonly string[]): Promise<void> {
+  if (opIds.length === 0) return;
+  const conn = await openDb();
+  const holes = opIds.map(() => '?').join(',');
+  await conn.runAsync(`DELETE FROM outbox WHERE op_id IN (${holes})`, [...opIds]);
+}
+
+/** 退出登录用：清空一切，避免下一个人看到上一个人的数据 */
+export async function wipe(): Promise<void> {
+  const conn = await openDb();
+  await conn.execAsync('DELETE FROM doc; DELETE FROM meta; DELETE FROM outbox;');
+}
+
+function isTable(value: string): value is RowTable {
+  return (TABLES as readonly string[]).includes(value);
+}

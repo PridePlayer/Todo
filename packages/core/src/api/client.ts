@@ -52,6 +52,14 @@ export interface ApiClientOptions {
   baseUrl?: string;
   /** 便于测试注入；默认用全局 fetch */
   fetchImpl?: typeof fetch;
+  /**
+   * 设备令牌提供者（Android 端）。
+   *
+   * 返回 null 时退回 Cookie 会话（Web 端），所以一个客户端类能同时服务两端。
+   * 每次请求都重新取，是因为令牌会静默轮换：缓存成局部变量的话，
+   * 轮换后旧值会一直用到下一次冷启动。
+   */
+  authToken?: () => string | null;
 }
 
 export interface ApiClient {
@@ -128,11 +136,17 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
     let res: Response;
     try {
+      // 每次请求现取：令牌轮换后不需要重启 App
+      const bearer = options.authToken?.() ?? null;
+      if (bearer) headers.set('authorization', `Bearer ${bearer}`);
+
       res = await doFetch(`${baseUrl}${path}`, {
         ...init,
         method,
         headers,
-        credentials: 'include',
+        // Bearer 模式下没有 Cookie 可带。RN 的 fetch 对 credentials 虽然宽容，
+        // 但 'include' 会让某些中间层以为这是浏览器请求并尝试处理 Cookie。
+        credentials: bearer ? 'omit' : 'include',
       });
     } catch {
       throw new ApiError(0, 'network_error', '网络不可用，请检查连接', undefined);

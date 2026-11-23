@@ -1,0 +1,172 @@
+import { useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useApp } from '../../src/store';
+import { C, FONT, HIT, SP } from '../../src/theme';
+
+const PHASE_LABEL: Record<string, string> = {
+  idle: '已同步',
+  syncing: '同步中…',
+  offline: '离线',
+  error: '同步失败',
+};
+
+function when(ts: number | null): string {
+  if (!ts) return '还没同步过';
+  const d = new Date(ts);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export default function SettingsScreen() {
+  const { auth, phase, pending, lastSyncAt, lastError, apiBase, refresh, signOut, changeApiBase, snapshot } = useApp();
+  const [draft, setDraft] = useState(apiBase);
+  const [busy, setBusy] = useState(false);
+
+  async function saveBase() {
+    if (draft.trim() === apiBase) return;
+    setBusy(true);
+    try {
+      await changeApiBase(draft);
+      Alert.alert('已切换', '本地缓存已清空并重新拉取。');
+    } catch (err) {
+      Alert.alert('地址无效', err instanceof Error ? err.message : '请检查格式');
+      setDraft(apiBase);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function confirmSignOut() {
+    Alert.alert('退出登录', '本机缓存会被清空，下次需要重新登录。', [
+      { text: '取消', style: 'cancel' },
+      { text: '退出', style: 'destructive', onPress: () => void signOut() },
+    ]);
+  }
+
+  return (
+    <SafeAreaView style={styles.root} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <Text style={styles.title}>设置</Text>
+
+        <Section label="账号">
+          <Text style={styles.value}>{auth?.email ?? '未登录'}</Text>
+          {auth ? (
+            <Text style={styles.hint}>
+              设备令牌到期：{new Date(auth.expiresAt).toLocaleDateString('zh-CN')}
+              （临期会自动续，不需要你操作）
+            </Text>
+          ) : null}
+        </Section>
+
+        <Section label="同步">
+          <View style={styles.syncRow}>
+            <Text style={styles.value}>{PHASE_LABEL[phase] ?? phase}</Text>
+            {pending > 0 ? <Text style={styles.pending}>{pending} 条待推</Text> : null}
+          </View>
+          <Text style={styles.hint}>
+            上次同步：{when(lastSyncAt)} · 本地 {snapshot.tasks.filter((t) => t.deletedAt === null).length} 条待办 /{' '}
+            {snapshot.logs.length} 条打卡记录
+          </Text>
+          {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
+          <Pressable
+            onPress={() => void refresh()}
+            disabled={phase === 'syncing'}
+            style={({ pressed }) => [styles.btn, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.btnText}>{phase === 'syncing' ? '同步中…' : '立即同步'}</Text>
+          </Pressable>
+        </Section>
+
+        <Section label="服务器地址">
+          <TextInput
+            value={draft}
+            onChangeText={setDraft}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            style={styles.input}
+            placeholder="https://todo.stellamp.me"
+            placeholderTextColor={C.n400}
+            editable={!busy}
+          />
+          <Text style={styles.hint}>
+            只填到主机名，不带 /api。改地址会清空本地缓存（数据仍在服务端，会重新拉回来）。
+          </Text>
+          <Pressable
+            onPress={() => void saveBase()}
+            disabled={busy}
+            style={({ pressed }) => [styles.btn, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.btnText}>保存地址</Text>
+          </Pressable>
+        </Section>
+
+        <Section label="危险操作">
+          <Pressable
+            onPress={confirmSignOut}
+            style={({ pressed }) => [styles.btnDanger, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.btnDangerText}>退出登录</Text>
+          </Pressable>
+        </Section>
+
+        <Text style={styles.footer}>GRID · 自托管待办与日历</Text>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionLabel}>{label}</Text>
+      {children}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: C.n0 },
+  scroll: { paddingHorizontal: SP[4], paddingTop: SP[4], paddingBottom: SP[12] },
+  title: { fontSize: FONT.xl, color: C.n900, fontWeight: '600', marginBottom: SP[6] },
+  section: { marginBottom: SP[6], borderTopWidth: 1, borderTopColor: C.n200, paddingTop: SP[3] },
+  sectionLabel: { fontSize: FONT.xs, color: C.n500, letterSpacing: 1, marginBottom: SP[2] },
+  value: { fontSize: FONT.md, color: C.n900 },
+  hint: { marginTop: SP[2], fontSize: FONT.sm, color: C.n500, lineHeight: 18 },
+  error: { marginTop: SP[2], fontSize: FONT.sm, color: C.danger },
+  syncRow: { flexDirection: 'row', alignItems: 'baseline', gap: SP[3] },
+  pending: { fontSize: FONT.sm, color: C.warn },
+  input: {
+    minHeight: HIT,
+    borderWidth: 1,
+    borderColor: C.n300,
+    borderRadius: 2,
+    paddingHorizontal: SP[3],
+    fontSize: FONT.body,
+    color: C.n900,
+  },
+  btn: {
+    marginTop: SP[3],
+    minHeight: HIT,
+    borderWidth: 1,
+    borderColor: C.n300,
+    borderRadius: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnText: { fontSize: FONT.body, color: C.n900 },
+  btnDanger: {
+    minHeight: HIT,
+    borderWidth: 1,
+    borderColor: C.danger,
+    borderRadius: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnDangerText: { fontSize: FONT.body, color: C.danger },
+  footer: { marginTop: SP[8], fontSize: FONT.xs, color: C.n400, textAlign: 'center' },
+});

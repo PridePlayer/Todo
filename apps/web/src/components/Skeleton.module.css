@@ -1,0 +1,66 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4) 0;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: calc(var(--row-h) - var(--sp-2));
+  padding: 0 var(--sp-1);
+}
+
+.box {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: var(--r-sm);
+  background: var(--n-100);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.line {
+  height: 8px;
+  border-radius: var(--r-sm);
+  background: var(--n-100);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.solo {
+  height: 8px;
+  border-radius: var(--r-sm);
+  background: var(--n-100);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* 系统开了"减少动态效果"就彻底停掉：闪烁比静止更难受，
+   而且这不是装饰性动画，去掉不影响任何信息传达 */
+@media (prefers-reduced-motion: reduce) {
+  .box,
+  .line,
+  .solo {
+    animation: none;
+  }
+}

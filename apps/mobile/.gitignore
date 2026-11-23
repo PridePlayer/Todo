@@ -1,0 +1,6 @@
+node_modules/
+.expo/
+.export-probe/
+dist/
+*.tsbuildinfo
+*.log
