@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GRID · 线框原型</title>
+<style>
+  :root{
+    --n-0:#FFFFFF; --n-50:#FAFAFA; --n-100:#F4F4F5; --n-200:#E4E4E7;
+    --n-300:#D4D4D8; --n-400:#A1A1AA; --n-500:#71717A; --n-600:#52525B;
+    --n-700:#3F3F46; --n-800:#27272A; --n-900:#18181B; --n-1000:#0A0A0A;
+    --a-100:#EDF1FA; --a-200:#C8D3EE; --a-500:#002FA7; --a-600:#00227A; --a-700:#001A5C;
+    --danger:#C0311E; --warn:#A16207;
+    --font-sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",
+                "Hiragino Sans GB","Microsoft YaHei","Source Han Sans SC",sans-serif;
+    --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px;
+    --sp-6:24px; --sp-8:32px; --sp-12:48px; --sp-16:64px;
+    --nav-w:64px; --drawer-w:380px; --aside-w:280px;
+    --topbar-h:52px; --row-h:48px; --tab-h:56px;
+    --r:2px; --r-pill:999px;
+    --d-fast:120ms; --d-base:180ms;
+    --ease:cubic-bezier(.2,0,0,1);
+    --hour-h:56px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--font-sans);
+    font-size:14px; line-height:22px; color:var(--n-700);
+    background:var(--n-100);
+    -webkit-font-smoothing:antialiased;
+    font-variant-numeric:tabular-nums;
+  }
+  button{font-family:inherit;font-size:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-thumb{background:var(--n-300);border-radius:3px}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  /* ── 原型工具条（不属于产品，仅用于切换视图） ───────────── */
+  .protobar{
+    height:44px;display:flex;align-items:center;gap:var(--sp-4);
+    padding:0 var(--sp-4);background:var(--n-0);border-bottom:1px solid var(--n-200);
+    position:sticky;top:0;z-index:100;flex-wrap:nowrap;white-space:nowrap;overflow-x:auto;
+  }
+  .protobar .brand{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--n-400)}
+  .protobar .spacer{flex:1}
+  .seg{display:inline-flex;border:1px solid var(--n-200);border-radius:var(--r);overflow:hidden;height:28px}
+  .seg button{
+    padding:0 12px;font-size:12px;color:var(--n-600);background:var(--n-0);
+    border-right:1px solid var(--n-200);height:100%;
+  }
+  .seg button:last-child{border-right:0}
+  .seg button.on{background:var(--a-500);color:#fff}
+
+  /* ── 舞台与 app 容器 ───────────────────────────────────── */
+  .stage{padding:var(--sp-6);display:flex;justify-content:center;min-height:calc(100vh - 44px)}
+  .app{
+    width:100%;max-width:1440px;height:calc(100vh - 44px - 48px);
+    background:var(--n-0);border:1px solid var(--n-200);
+    display:flex;overflow:hidden;position:relative;
+    transition:max-width var(--d-base) var(--ease);
+  }
+  .app.is-mobile{max-width:390px;height:780px;flex-direction:column}
+
+  /* ── 左侧导航 ──────────────────────────────────────────── */
+  .rail{
+    width:var(--nav-w);flex:0 0 var(--nav-w);border-right:1px solid var(--n-200);
+    display:flex;flex-direction:column;align-items:center;padding:var(--sp-4) 0;gap:var(--sp-1);
+    background:var(--n-0);
+  }
+  .rail .logo{width:24px;height:24px;margin-bottom:var(--sp-4);position:relative}
+  .rail .logo::before{content:"";position:absolute;inset:0;border:2px solid var(--n-900)}
+  .rail .logo::after{content:"";position:absolute;left:8px;top:0;bottom:0;width:2px;background:var(--n-900)}
+  .rail button{
+    width:40px;height:40px;display:grid;place-items:center;border-radius:var(--r);
+    color:var(--n-500);position:relative;
+  }
+  .rail button:hover{background:var(--n-100)}
+  .rail button.on{color:var(--a-500)}
+  .rail button.on::before{content:"";position:absolute;left:-12px;top:8px;bottom:8px;width:2px;background:var(--a-500)}
+  .rail button svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.5}
+
+  /* ── 主区 ─────────────────────────────────────────────── */
+  .main{flex:1;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+  .topbar{
+    height:var(--topbar-h);flex:0 0 var(--topbar-h);border-bottom:1px solid var(--n-200);
+    display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-6);
+  }
+  .topbar h1{font-size:20px;line-height:28px;font-weight:600;letter-spacing:-.02em;color:var(--n-900);white-space:nowrap}
+  .topbar .date{font-size:13px;color:var(--n-500)}
+  .topbar .spacer{flex:1}
+  .sync{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--n-500)}
+  .sync .dot{width:8px;height:8px;border-radius:50%;background:var(--a-500);animation:pulse 1.2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+  .views{flex:1;min-height:0;position:relative}
+  .view{display:none;height:100%;overflow:auto}
+  .view.on{display:block;animation:fade var(--d-base) var(--ease)}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+
+  /* ── 今天：周视图 ─────────────────────────────────────── */
+  .today-wrap{display:flex;height:100%}
+  .week{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+  .week-head{display:flex;border-bottom:1px solid var(--n-200);flex:0 0 auto}
+  .week-head .gutter{width:56px;flex:0 0 56px;border-right:1px solid var(--n-200)}
+  .week-head .d{
+    flex:1;min-width:0;padding:var(--sp-2) var(--sp-2);text-align:left;
+    border-right:1px solid var(--n-200);
+  }
+  .week-head .d:last-child{border-right:0}
+  .week-head .d .wd{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--n-500)}
+  .week-head .d .dd{font-size:16px;font-weight:600;color:var(--n-700);margin-top:2px}
+  .week-head .d.today{background:var(--a-100);box-shadow:inset 0 -2px 0 var(--a-500)}
+  .week-head .d.today .wd,.week-head .d.today .dd{color:var(--a-500)}
+
+  .week-body{flex:1;display:flex;overflow:auto;position:relative;align-items:flex-start}
+  .hours{width:56px;flex:0 0 56px;height:672px;border-right:1px solid var(--n-200);position:relative}
+  .hours span{
+    position:absolute;right:8px;font-size:11px;color:var(--n-400);transform:translateY(-50%);
+  }
+  .cols{flex:1;display:flex;position:relative;height:672px}
+  .col{
+    flex:1;min-width:0;height:672px;border-right:1px solid var(--n-200);position:relative;
+    background-image:repeating-linear-gradient(to bottom,
+      transparent 0 55px, var(--n-200) 55px 56px);
+    background-position:0 0;
+  }
+  .col:last-child{border-right:0}
+  .col.today{background-color:rgba(0,47,167,.025)}
+
+  /* 事件块：实心；待办块：描边 */
+  .ev{
+    position:absolute;left:3px;right:3px;border-radius:var(--r);
+    padding:4px 8px;overflow:hidden;font-size:12px;line-height:16px;color:var(--n-800);
+    background:var(--n-100);border-left:3px solid var(--n-400);
+  }
+  .ev .t{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ev .m{font-size:11px;color:var(--n-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .td{
+    position:absolute;left:3px;right:3px;border-radius:var(--r);
+    padding:4px 8px;overflow:hidden;font-size:12px;line-height:16px;color:var(--n-800);
+    background:var(--n-0);border:2px solid var(--a-500);
+  }
+  .td .t{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .td .m{font-size:11px;color:var(--n-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .td.overdue{border-color:var(--danger)}
+  .td.overdue .m{color:var(--danger)}
+  .ev,.td{z-index:6}
+  .nowline{position:absolute;left:0;right:0;height:2px;background:var(--a-500);z-index:5}
+  .nowline::before{content:"";position:absolute;left:-4px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--a-500)}
+
+  /* 待安排侧栏 */
+  .aside{
+    width:var(--aside-w);flex:0 0 var(--aside-w);border-left:1px solid var(--n-200);
+    background:var(--n-50);display:flex;flex-direction:column;overflow:auto;
+  }
+  .aside-head{
+    padding:var(--sp-3) var(--sp-4);border-bottom:1px solid var(--n-200);
+    display:flex;align-items:baseline;gap:var(--sp-2);position:sticky;top:0;background:var(--n-50);
+  }
+  .aside-head h2{font-size:16px;font-weight:600;letter-spacing:-.01em;color:var(--n-800)}
+  .aside-head .count{font-size:12px;color:var(--n-500)}
+  .todo-list{padding:var(--sp-2) 0}
+
+  /* 列表行 */
+  .row{
+    display:flex;align-items:flex-start;gap:var(--sp-3);
+    min-height:var(--row-h);padding:var(--sp-2) var(--sp-4);
+    cursor:pointer;
+  }
+  .row:hover{background:var(--n-100)}
+  .row.sel{background:var(--a-100);box-shadow:inset 2px 0 0 var(--a-500)}
+  .cb{
+    width:18px;height:18px;flex:0 0 18px;border:1.5px solid var(--n-400);border-radius:2px;
+    margin-top:2px;display:grid;place-items:center;background:var(--n-0);position:relative;
+  }
+  .cb::before{content:"";position:absolute;inset:-13px}
+  .cb.on{background:var(--a-500);border-color:var(--a-500)}
+  .cb.on svg{width:11px;height:11px;stroke:#fff;stroke-width:2;fill:none}
+  .row .body{flex:1;min-width:0}
+  .row .title{font-size:14px;color:var(--n-800);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row.done .title{color:var(--n-500);text-decoration:line-through;font-weight:400}
+  .row .meta{display:flex;gap:var(--sp-2);margin-top:2px;font-size:11px;color:var(--n-500);flex-wrap:wrap}
+  .row .meta .due.overdue{color:var(--danger);font-weight:500}
+  .row .meta .tag{border:1px solid var(--n-300);border-radius:var(--r-pill);padding:0 7px;color:var(--n-600)}
+
+  /* ── 四象限 ───────────────────────────────────────────── */
+  .quad{padding:var(--sp-4);display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:var(--sp-3);height:100%}
+  .qbox{border:1px solid var(--n-200);border-radius:var(--r);padding:var(--sp-4);overflow:auto;display:flex;flex-direction:column}
+  .qbox .qh{display:flex;align-items:baseline;gap:var(--sp-2);margin-bottom:var(--sp-3)}
+  .qbox .qh .idx{font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--n-400)}
+  .qbox .qh .name{font-size:16px;font-weight:600;color:var(--n-800);letter-spacing:-.01em}
+  .qbox .qh .n{margin-left:auto;font-size:12px;color:var(--n-500)}
+  .qbox .row{padding-left:0;padding-right:0}
+  .qbox .row:hover{background:transparent}
+  .qbox .foot{margin-top:auto;padding-top:var(--sp-3);font-size:12px;color:var(--n-500)}
+
+  /* ── 月视图 ───────────────────────────────────────────── */
+  .month{padding:var(--sp-4);height:100%;display:flex;flex-direction:column}
+  .month-head{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--n-200)}
+  .month-head div{padding:var(--sp-2);font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--n-500)}
+  .month-grid{flex:1;display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;border-left:1px solid var(--n-200);border-top:1px solid var(--n-200)}
+  .mcell{border-right:1px solid var(--n-200);border-bottom:1px solid var(--n-200);padding:var(--sp-1) var(--sp-2);overflow:hidden;min-height:76px}
+  .mcell .dnum{font-size:12px;color:var(--n-500);margin-bottom:2px}
+  .mcell.out{background:var(--n-50)}
+  .mcell.out .dnum{color:var(--n-300)}
+  .mcell.today{background:var(--a-100)}
+  .mcell.today .dnum{color:var(--a-500);font-weight:600;box-shadow:inset 0 -2px 0 var(--a-500);display:inline-block}
+  .mcell .item{font-size:11px;line-height:16px;color:var(--n-700);display:flex;gap:4px;align-items:center}
+  .mcell .item::before{content:"";width:5px;height:5px;flex:0 0 5px;background:var(--n-400)}
+  .mcell .item.todo::before{background:transparent;border:1.5px solid var(--a-500)}
+  .mcell .more{font-size:11px;color:var(--n-500)}
+
+  /* ── 事件列表 ─────────────────────────────────────────── */
+  .list{padding:0 var(--sp-6) var(--sp-8)}
+  .group-head{
+    position:sticky;top:0;background:var(--n-0);padding:var(--sp-3) 0 var(--sp-2);
+    border-bottom:1px solid var(--n-200);display:flex;align-items:baseline;gap:var(--sp-2);
+    font-size:13px;color:var(--n-800);font-weight:500;
+  }
+  .group-head .n{margin-left:auto;font-size:12px;font-weight:400;color:var(--n-500)}
+  .lrow{display:flex;align-items:center;gap:var(--sp-4);min-height:52px;border-bottom:1px solid var(--n-100)}
+  .lrow:last-child{border-bottom:0}
+  .lrow .time{width:120px;flex:0 0 120px;font-size:12px;color:var(--n-500)}
+  .lrow .name{flex:1;min-width:0;font-size:14px;color:var(--n-800);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lrow .src{width:180px;flex:0 0 180px;font-size:12px;color:var(--n-500);text-align:right}
+  .lrow .bar{width:3px;height:20px;background:var(--n-400)}
+  .lrow .bar.todo{background:transparent;border:1.5px solid var(--a-500)}
+
+  /* ── 甘特 ─────────────────────────────────────────────── */
+  .gantt{padding:var(--sp-4);height:100%;display:flex;flex-direction:column;overflow:auto}
+  .g-head{display:flex;border-bottom:1px solid var(--n-200);padding-bottom:var(--sp-2);position:sticky;top:0;background:var(--n-0);z-index:2}
+  .g-head .label{width:220px;flex:0 0 220px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--n-500)}
+  .g-head .days{flex:1;display:grid;grid-template-columns:repeat(10,1fr);font-size:11px;color:var(--n-500)}
+  .g-head .days span{text-align:left}
+  .g-row{display:flex;align-items:center;height:28px;font-size:13px}
+  .g-row .label{width:220px;flex:0 0 220px;color:var(--n-700);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:var(--sp-3)}
+  .g-row .label.group{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--n-400);font-weight:600;height:32px;display:flex;align-items:flex-end;padding-bottom:4px}
+  .g-row .track{flex:1;display:grid;grid-template-columns:repeat(10,1fr);position:relative;height:28px;align-items:center}
+  .g-row .track::before{
+    content:"";position:absolute;inset:0;
+    background-image:repeating-linear-gradient(to right,var(--n-100) 0 1px,transparent 1px calc(100%/10));
+  }
+  .bar-g{height:16px;background:rgba(0,47,167,.18);border-left:2px solid var(--a-500);border-radius:1px}
+
+  /* ── 打卡 ─────────────────────────────────────────────── */
+  .habits{padding:var(--sp-4) var(--sp-6) var(--sp-8)}
+  .habit{border-bottom:1px solid var(--n-200);padding:var(--sp-4) 0}
+  .habit:last-child{border-bottom:0}
+  .habit .hh{display:flex;align-items:baseline;gap:var(--sp-3)}
+  .habit .hh .name{font-size:16px;font-weight:600;color:var(--n-800);letter-spacing:-.01em}
+  .habit .hh .streak{font-size:12px;color:var(--a-500);font-weight:500}
+  .habit .hh .weekchk{margin-left:auto;display:flex;gap:4px}
+  .habit .hh .weekspan{font-size:11px;color:var(--n-500);margin-right:var(--sp-2)}
+  .wk{width:22px;height:22px;border:1.5px solid var(--n-300);border-radius:2px;display:grid;place-items:center}
+  .wk.on{background:var(--a-500);border-color:var(--a-500)}
+  .wk.on svg{width:11px;height:11px;stroke:#fff;stroke-width:2;fill:none}
+  .habit .sub{font-size:12px;color:var(--n-500);margin-top:var(--sp-2)}
+  .hbody{display:flex;gap:56px;margin-top:var(--sp-3);align-items:flex-start}
+  .hstat{display:flex;flex-direction:column;gap:var(--sp-2);font-size:12px;min-width:200px}
+  .hstat .k{display:inline-block;width:56px;color:var(--n-500)}
+  .hstat .v{color:var(--n-800)}
+  .heat{display:flex;gap:3px;margin-top:var(--sp-3);align-items:flex-start}
+  .heat .hcol{display:flex;flex-direction:column;gap:3px}
+  .hc{width:11px;height:11px;border-radius:2px;background:var(--n-100)}
+  .hc.l1{background:var(--n-200)}
+  .hc.l2{background:var(--n-400)}
+  .hc.l3{background:var(--a-200)}
+  .hc.l4{background:var(--a-500)}
+  .heat-months{display:flex;justify-content:space-between;width:165px;font-size:11px;color:var(--n-500);margin-top:6px}
+
+  /* ── 抽屉 ─────────────────────────────────────────────── */
+  .overlay{position:absolute;inset:0;background:rgba(10,10,10,.24);opacity:0;pointer-events:none;transition:opacity var(--d-base) var(--ease);z-index:39}
+  .overlay.on{opacity:1;pointer-events:auto}
+  .drawer{
+    width:var(--drawer-w);flex:0 0 var(--drawer-w);border-left:1px solid var(--n-200);
+    background:var(--n-0);display:flex;flex-direction:column;
+    position:absolute;right:0;top:0;bottom:0;z-index:40;
+    transform:translateX(100%);transition:transform var(--d-base) var(--ease);
+  }
+  .drawer.on{transform:translateX(0)}
+  .app.is-mobile .drawer{width:100%;flex-basis:100%}
+  .dh{height:52px;flex:0 0 52px;border-bottom:1px solid var(--n-200);display:flex;align-items:center;padding:0 var(--sp-4);gap:var(--sp-2)}
+  .dh .ttl{font-size:16px;font-weight:600;color:var(--n-800)}
+  .dh .spacer{flex:1}
+  .iconbtn{width:32px;height:32px;display:grid;place-items:center;border-radius:var(--r);color:var(--n-500)}
+  .iconbtn:hover{background:var(--n-100)}
+  .iconbtn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.5}
+  .dbody{flex:1;overflow:auto;padding:var(--sp-4)}
+  .dtitle{font-size:16px;font-weight:500;color:var(--n-800);padding:var(--sp-2) 0;margin-bottom:var(--sp-2);border-bottom:1px solid var(--n-200)}
+  .field{display:flex;align-items:center;min-height:40px;gap:var(--sp-3)}
+  .field .lb{width:80px;flex:0 0 80px;font-size:12px;color:var(--n-500)}
+  .field .val{flex:1;font-size:14px;color:var(--n-800);border:1px solid transparent;border-radius:var(--r);padding:4px 8px;margin-left:-8px}
+  .field .val:hover{border-color:var(--n-200)}
+  .field .val.plain{border:0}
+  .field .val input{font:inherit;color:inherit;border:0;background:none;width:100%;outline:none}
+  .note{border:1px solid var(--n-300);border-radius:var(--r);min-height:88px;padding:var(--sp-2);font-size:13px;color:var(--n-400)}
+  .subtasks{margin-top:var(--sp-2)}
+  .subtasks .row{padding-left:0;padding-right:0;min-height:40px}
+  .subtasks .row:hover{background:transparent}
+  .dfoot{height:48px;flex:0 0 48px;border-top:1px solid var(--n-200);display:flex;align-items:center;gap:var(--sp-2);padding:0 var(--sp-4)}
+  .btn{height:36px;padding:0 var(--sp-4);border-radius:var(--r);font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px}
+  .btn.primary{background:var(--a-500);color:#fff}
+  .btn.primary:hover{background:var(--a-600)}
+  .btn.ghost{color:var(--n-700)}
+  .btn.ghost:hover{background:var(--n-100)}
+  .btn.danger{color:var(--danger);border:1px solid var(--danger)}
+  .btn.sm{height:28px;padding:0 var(--sp-3);font-size:12px}
+  .dfoot .spacer{flex:1}
+
+  /* ── 空状态示例 ───────────────────────────────────────── */
+  .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--sp-3);padding:var(--sp-16) 0;text-align:center}
+  .empty .ic{width:32px;height:32px;border:1.5px solid var(--n-300);border-radius:2px}
+  .empty p{font-size:16px;color:var(--n-600)}
+  .empty small{font-size:13px;color:var(--n-500)}
+
+  /* ── 移动端 ───────────────────────────────────────────── */
+  .app.is-mobile .rail{display:none}
+  .app.is-mobile .topbar{height:48px;flex-basis:48px;padding:0 var(--sp-4)}
+  .app.is-mobile .topbar h1{font-size:16px}
+  .app.is-mobile .topbar .date{font-size:12px}
+  .app.is-mobile .aside{display:none}
+  .app.is-mobile .topbar .seg{display:none}
+  .app.is-mobile .sync span:last-child{display:none}
+  .app.is-mobile .week-head > div:nth-of-type(n+5){display:none}
+  .app.is-mobile .cols > .col:nth-child(n+4){display:none}
+  .app.is-mobile .week-head .gutter,.app.is-mobile .hours{width:44px;flex-basis:44px}
+  .app.is-mobile .quad{grid-template-columns:1fr;grid-template-rows:repeat(4,minmax(140px,1fr));padding:var(--sp-3)}
+  .app.is-mobile .month{padding:var(--sp-2)}
+  .app.is-mobile .mcell{min-height:56px;padding:2px 4px}
+  .app.is-mobile .list{padding:0 var(--sp-4) var(--sp-8)}
+  .app.is-mobile .habits{padding:var(--sp-3) var(--sp-4) var(--sp-8)}
+  .app.is-mobile .heat .hc{width:8px;height:8px}
+  .mobtab{
+    display:none;height:var(--tab-h);border-top:1px solid var(--n-200);background:var(--n-0);
+    align-items:stretch;
+  }
+  .app.is-mobile .mobtab{display:flex}
+  .mobtab button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px;color:var(--n-500)}
+  .mobtab button.on{color:var(--a-500)}
+  .mobtab svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.5}
+  .app.is-mobile .g-head .label,.app.is-mobile .g-row .label{width:120px;flex-basis:120px}
+
+  .fade{animation:fade var(--d-base) var(--ease)}
+</style>
+</head>
+<body>
+
+<div class="protobar">
+  <span class="brand">GRID · 线框原型 v1</span>
+  <div class="seg" id="viewSeg">
+    <button data-v="today" class="on">今天</button>
+    <button data-v="quad">四象限</button>
+    <button data-v="month">月</button>
+    <button data-v="list">列表</button>
+    <button data-v="gantt">甘特</button>
+    <button data-v="habit">打卡</button>
+  </div>
+  <div class="spacer"></div>
+  <div class="seg" id="devSeg">
+    <button data-d="desktop" class="on">桌面 1440</button>
+    <button data-d="mobile">手机 390</button>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="app" id="app">
+    <!-- 左侧图标导航 -->
+    <nav class="rail">
+      <div class="logo"></div>
+      <button class="on" data-v="today" title="今天">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="1"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+      </button>
+      <button data-v="quad" title="四象限">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>
+      </button>
+      <button data-v="month" title="日历">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="1"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      </button>
+      <button data-v="habit" title="打卡">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      </button>
+      <button data-v="list" title="全部待办">
+        <svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      </button>
+      <div style="flex:1"></div>
+      <button title="设置">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.3 1a7 7 0 0 0-1.7-1L14.5 3h-5l-.4 2.5a7 7 0 0 0-1.7 1l-2.3-1-2 3.5L3 11a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.3-1a7 7 0 0 0 1.7 1l.4 2.5h5l.4-2.5a7 7 0 0 0 1.7-1l2.3 1 2-3.5-2-1.5c.1-.3.1-.7.1-1z"/></svg>
+      </button>
+    </nav>
+
+    <div class="main">
+      <header class="topbar">
+        <h1 id="pageTitle">今天</h1>
+        <span class="date" id="pageDate">11 月 23 日 周一</span>
+        <div class="spacer"></div>
+        <div class="seg" style="height:28px">
+          <button class="on">全部</button><button>待办</button><button>事件</button>
+        </div>
+        <div class="sync"><span class="dot"></span><span>已同步</span></div>
+      </header>
+
+      <div class="views">
+        <!-- 今天 -->
+        <section class="view on" id="v-today">
+          <div class="today-wrap">
+            <div class="week">
+              <div class="week-head">
+                <div class="gutter"></div>
+                <div class="d today"><div class="wd">周一</div><div class="dd">23</div></div>
+                <div class="d"><div class="wd">周二</div><div class="dd">24</div></div>
+                <div class="d"><div class="wd">周三</div><div class="dd">25</div></div>
+                <div class="d"><div class="wd">周四</div><div class="dd">26</div></div>
+                <div class="d"><div class="wd">周五</div><div class="dd">27</div></div>
+                <div class="d"><div class="wd">周六</div><div class="dd">28</div></div>
+                <div class="d"><div class="wd">周日</div><div class="dd">29</div></div>
+              </div>
+              <div class="week-body">
+                <div class="hours" id="hours"></div>
+                <div class="cols">
+                  <div class="col today" id="col0">
+                    <div class="ev" style="top:56px;height:56px">
+                      <div class="t">周会</div><div class="m">09:00–10:00 · 会议室 A</div>
+                    </div>
+                    <div class="td" style="top:112px;height:112px">
+                      <div class="t">写周报</div><div class="m">10:00–12:00</div>
+                    </div>
+                    <div class="ev" style="top:336px;height:84px">
+                      <div class="t">产品评审</div><div class="m">14:00–15:30 · 线上</div>
+                    </div>
+                    <div class="nowline" style="top:366px"></div>
+                  </div>
+                  <div class="col"><div class="ev" style="top:112px;height:56px"><div class="t">1:1</div><div class="m">10:00–11:00</div></div></div>
+                  <div class="col"><div class="td" style="top:224px;height:56px"><div class="t">整理需求池</div><div class="m">12:00–13:00</div></div></div>
+                  <div class="col"><div class="ev" style="top:168px;height:112px"><div class="t">季度复盘会</div><div class="m">11:00–13:00</div></div></div>
+                  <div class="col"><div class="td overdue" style="top:56px;height:56px"><div class="t">交季度报告</div><div class="m">09:00–10:00 · 逾期</div></div></div>
+                  <div class="col"></div>
+                  <div class="col"></div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="aside">
+              <div class="aside-head"><h2>待安排</h2><span class="count">4 项</span></div>
+              <div class="todo-list">
+                <div class="row" data-open="1">
+                  <span class="cb"></span>
+                  <div class="body">
+                    <div class="title">写季度复盘</div>
+                    <div class="meta"><span class="tag">工作</span><span>重要不紧急</span></div>
+                  </div>
+                </div>
+                <div class="row" data-open="1">
+                  <span class="cb"></span>
+                  <div class="body">
+                    <div class="title">买猫粮</div>
+                    <div class="meta"><span class="tag">生活</span><span class="due">今天</span></div>
+                  </div>
+                </div>
+                <div class="row" data-open="1">
+                  <span class="cb"></span>
+                  <div class="body">
+                    <div class="title">预约体检</div>
+                    <div class="meta"><span class="tag">个人</span><span class="due overdue">逾期 2 天</span></div>
+                  </div>
+                </div>
+                <div class="row done" data-open="1">
+                  <span class="cb on"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></span>
+                  <div class="body">
+                    <div class="title">回复法务邮件</div>
+                    <div class="meta"><span class="tag">工作</span><span>01:30 完成</span></div>
+                  </div>
+                </div>
+              </div>
+              <div style="padding:var(--sp-4);margin-top:auto">
+                <button class="btn primary" style="width:100%;justify-content:center">+ 新建待办</button>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <!-- 四象限 -->
+        <section class="view" id="v-quad">
+          <div class="quad">
+            <div class="qbox">
+              <div class="qh"><span class="idx">01</span><span class="name">重要且紧急</span><span class="n">3 项</span></div>
+              <div class="row"><span class="cb"></span><div class="body"><div class="title">交季度报告</div><div class="meta"><span class="due">今天 18:00</span></div></div></div>
+              <div class="row"><span class="cb"></span><div class="body"><div class="title">回复法务邮件</div><div class="meta"><span class="due overdue">逾期</span></div></div></div>
+              <div class="row"><span class="cb"></span><div class="body"><div class="title">修线上 bug</div><div class="meta"><span class="tag">工程</span></div></div></div>
+              <div class="foot">3 项 · 1 项逾期</div>
+            </div>
+            <div class="qbox">
+              <div class="qh"><span class="idx">02</span><span class="name">重要不紧急</span><span class="n">5 项</span></div>
+              <div class="row"><span class="cb"></span><div class="body"><div class="title">写季度复盘</div><div class="meta"><span class="tag">工作</span></div></div></div>
+              <div class="row"><span class="cb"></span><div class="body"><div class="title">学 Rust 所有权模型</div><div class="meta"><span class="tag">学习</span></div></div></div>
+              <div class="row"><span class="cb"></span><div class="body"><div class="title">整理读书笔记</div><div class="meta"><span class="tag">学习</span></div></div></div>
+              <div class="row"><span class="cb"></span><div class="body"><div class="title">规划下季度目标</div><div class="meta"><span>周五</span></div></div></div>
+              <div class="row"><span class="cb"></span><div class="body"><div class="title">预约体检</div><div class="meta"><span class="due overdue">逾期 2 天</span></div></div></div>
+              <div class="foot">5 项 · 0 项逾期</div>
+            </div>
+            <div class="qbox">
+              <div class="qh"><span class="idx">03</span><span class="name">紧急不重要</span><span class="n">2 项</span></div>
+              <div class="row"><span class="cb"></span><div class="body"><div class="title">报销单填写</div><div class="meta"><span class="due">今天</span></div></div></div>
+              <div class="row"><span class="cb"></span><div class="body"><div class="title">群里回复排期</div><div class="meta"><span>10 分钟</span></div></div></div>
+              <div class="foot">2 项 · 0 项逾期</div>
+            </div>
+            <div class="qbox">
+              <div class="qh"><span class="idx">04</span><span class="name">不重要不紧急</span><span class="n">4 项</span></div>
+              <div class="row"><span class="cb"></span><div class="body"><div class="title">买猫粮</div><div class="meta"><span class="tag">生活</span></div></div></div>
+              <div class="row"><span class="cb"></span><div class="body"><div class="title">整理下载文件夹</div><div class="meta"></div></div></div>
+              <div class="row"><span class="cb"></span><div class="body"><div class="title">看一部纪录片</div><div class="meta"></div></div></div>
+              <div class="row"><span class="cb"></span><div class="body"><div class="title">换手机壳</div><div class="meta"></div></div></div>
+              <div class="foot">4 项 · 0 项逾期</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 月视图 -->
+        <section class="view" id="v-month">
+          <div class="month">
+            <div class="month-head">
+              <div>周一</div><div>周二</div><div>周三</div><div>周四</div><div>周五</div><div>周六</div><div>周日</div>
+            </div>
+            <div class="month-grid" id="monthGrid"></div>
+          </div>
+        </section>
+
+        <!-- 事件列表 -->
+        <section class="view" id="v-list">
+          <div class="list">
+            <div class="group-head">今天 · 11 月 23 日 周一 <span class="n">3 项</span></div>
+            <div class="lrow"><span class="bar"></span><span class="time">09:00 – 10:00</span><span class="name">周会</span><span class="src">工作日历 · 会议室 A</span></div>
+            <div class="lrow"><span class="bar todo"></span><span class="time">10:00 – 12:00</span><span class="name">写周报</span><span class="src">待办 · 工作清单</span></div>
+            <div class="lrow"><span class="bar"></span><span class="time">14:00 – 15:30</span><span class="name">产品评审</span><span class="src">工作日历 · 线上</span></div>
+
+            <div class="group-head">明天 · 11 月 24 日 周二 <span class="n">2 项</span></div>
+            <div class="lrow"><span class="bar"></span><span class="time">全天</span><span class="name">体检</span><span class="src">个人日历</span></div>
+            <div class="lrow"><span class="bar todo"></span><span class="time">—</span><span class="name">买猫粮</span><span class="src">待办 · 生活清单</span></div>
+
+            <div class="group-head">11 月 25 日 周三 <span class="n">1 项</span></div>
+            <div class="lrow"><span class="bar"></span><span class="time">11:00 – 13:00</span><span class="name">季度复盘会</span><span class="src">工作日历 · 大会议室</span></div>
+          </div>
+        </section>
+
+        <!-- 甘特 -->
+        <section class="view" id="v-gantt">
+          <div class="gantt">
+            <div class="g-head">
+              <div class="label">任务</div>
+              <div class="days"><span>18</span><span>19</span><span>20</span><span>21</span><span>22</span><span>23</span><span>24</span><span>25</span><span>26</span><span>27</span></div>
+            </div>
+            <div class="g-row"><span class="label group">工作清单</span><span class="track"></span></div>
+            <div class="g-row"><span class="label">　交季度报告</span><span class="track"><span class="bar-g" style="grid-column:1/4"></span></span></div>
+            <div class="g-row"><span class="label">　修线上 bug</span><span class="track"><span class="bar-g" style="grid-column:3/6"></span></span></div>
+            <div class="g-row"><span class="label">　产品评审</span><span class="track"><span class="bar-g" style="grid-column:6/8"></span></span></div>
+            <div class="g-row"><span class="label group">学习</span><span class="track"></span></div>
+            <div class="g-row"><span class="label">　学 Rust</span><span class="track"><span class="bar-g" style="grid-column:2/10"></span></span></div>
+            <div class="g-row"><span class="label group">生活</span><span class="track"></span></div>
+            <div class="g-row"><span class="label">　预约体检</span><span class="track"><span class="bar-g" style="grid-column:2/3"></span></span></div>
+            <div class="g-row"><span class="label">　买猫粮</span><span class="track"><span class="bar-g" style="grid-column:5/6"></span></span></div>
+          </div>
+        </section>
+
+        <!-- 打卡 -->
+        <section class="view" id="v-habit">
+          <div class="habits">
+            <div class="habit">
+              <div class="hh">
+                <span class="name">阅读</span>
+                <span class="streak">连续 23 天</span>
+                <span class="weekchk"><span class="weekspan">本周 5/7</span>
+                  <span class="wk on"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></span>
+                  <span class="wk on"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></span>
+                  <span class="wk on"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></span>
+                  <span class="wk"></span>
+                  <span class="wk on"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></span>
+                  <span class="wk on"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></span>
+                  <span class="wk"></span>
+                </span>
+              </div>
+              <div class="hbody">
+                <div>
+                  <div class="heat" id="heat1"></div>
+                  <div class="heat-months"><span>9 月</span><span>10 月</span><span>11 月</span></div>
+                </div>
+                <div class="hstat">
+                  <div><span class="k">近 30 天</span><span class="v">82%</span></div>
+                  <div><span class="k">总计</span><span class="v">148 次</span></div>
+                  <div><span class="k">目标</span><span class="v">每天 · 30 分钟</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="habit">
+              <div class="hh">
+                <span class="name">运动</span>
+                <span class="streak">连续 4 天</span>
+                <span class="weekchk"><span class="weekspan">本周 3/3</span>
+                  <span class="wk on"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></span>
+                  <span class="wk"></span>
+                  <span class="wk on"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></span>
+                  <span class="wk"></span>
+                  <span class="wk on"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></span>
+                  <span class="wk"></span>
+                  <span class="wk"></span>
+                </span>
+              </div>
+              <div class="hbody">
+                <div>
+                  <div class="heat" id="heat2"></div>
+                  <div class="heat-months"><span>9 月</span><span>10 月</span><span>11 月</span></div>
+                </div>
+                <div class="hstat">
+                  <div><span class="k">近 30 天</span><span class="v">64%</span></div>
+                  <div><span class="k">总计</span><span class="v">92 次</span></div>
+                  <div><span class="k">目标</span><span class="v">每周 3 次</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="habit">
+              <div class="hh">
+                <span class="name">冥想</span>
+                <span class="streak">连续 0 天</span>
+                <span class="weekchk"><span class="weekspan">本周 1/7</span>
+                  <span class="wk"></span><span class="wk"></span><span class="wk"></span>
+                  <span class="wk on"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></span>
+                  <span class="wk"></span><span class="wk"></span><span class="wk"></span>
+                </span>
+              </div>
+              <div class="hbody">
+                <div>
+                  <div class="heat" id="heat3"></div>
+                  <div class="heat-months"><span>9 月</span><span>10 月</span><span>11 月</span></div>
+                </div>
+                <div class="hstat">
+                  <div><span class="k">近 30 天</span><span class="v">23%</span></div>
+                  <div><span class="k">总计</span><span class="v">31 次</span></div>
+                  <div><span class="k">目标</span><span class="v">每天 · 10 分钟</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="mobtab">
+      <button class="on" data-v="today"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="1"/><path d="M3 10h18"/></svg>今日</button>
+      <button data-v="quad"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>象限</button>
+      <button data-v="month"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17"/><path d="M3 9h18"/></svg>日历</button>
+      <button data-v="habit"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>打卡</button>
+    </div>
+
+    <!-- 抽屉 -->
+    <div class="overlay" id="overlay"></div>
+    <aside class="drawer" id="drawer">
+      <div class="dh">
+        <span class="ttl">任务</span>
+        <div class="spacer"></div>
+        <button class="iconbtn" title="更多">
+          <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+        </button>
+        <button class="iconbtn" id="drawerClose" title="关闭">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="dbody">
+        <div class="dtitle">交季度报告</div>
+        <div class="field"><span class="lb">日期</span><span class="val"><input value="2026-11-23"></span></div>
+        <div class="field"><span class="lb">时间</span><span class="val"><input value="18:00 – 19:00"></span></div>
+        <div class="field"><span class="lb">重复</span><span class="val">每周一、三、五 ▾</span></div>
+        <div class="field"><span class="lb">提醒</span><span class="val">提前 15 分钟 ▾</span></div>
+        <div class="field"><span class="lb">地点</span><span class="val">会议室 A　<span style="color:var(--a-500);font-size:12px">在地图打开 →</span></span></div>
+        <div class="field"><span class="lb">清单</span><span class="val">工作 ▾</span></div>
+        <div class="field"><span class="lb">优先级</span><span class="val">高 ▾</span></div>
+        <div class="field"><span class="lb">标签</span><span class="val plain" style="display:flex;gap:6px;align-items:center">
+          <span style="border:1px solid var(--n-300);border-radius:999px;padding:0 7px;font-size:12px;color:var(--n-600)">#财务</span>
+          <span style="border:1px solid var(--n-300);border-radius:999px;padding:0 7px;font-size:12px;color:var(--n-600)">#紧急</span>
+          <span style="color:var(--n-400);font-size:12px">+ 添加</span>
+        </span></div>
+        <div class="field" style="align-items:flex-start;margin-top:var(--sp-2)">
+          <span class="lb" style="padding-top:6px">备注</span>
+          <div class="note" style="flex:1">汇总 Q3 的营收、成本与项目交付情况。</div>
+        </div>
+        <div style="margin-top:var(--sp-4)">
+          <div style="font-size:12px;color:var(--n-500);margin-bottom:var(--sp-2)">子任务　3/5</div>
+          <div class="subtasks">
+            <div class="row done"><span class="cb on"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></span><div class="body"><div class="title">收集数据</div></div></div>
+            <div class="row done"><span class="cb on"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></span><div class="body"><div class="title">整理图表</div></div></div>
+            <div class="row"><span class="cb"></span><div class="body"><div class="title">写结论</div></div></div>
+            <div class="row"><span class="cb"></span><div class="body"><div class="title">交上级审阅</div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="dfoot">
+        <button class="btn danger sm">删除</button>
+        <div class="spacer"></div>
+        <button class="btn ghost">保存</button>
+        <button class="btn primary">完成</button>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(function(){
+  var app = document.getElementById('app');
+  var titleMap = {today:'今天', quad:'四象限', month:'月视图', list:'事件列表', gantt:'甘特', habit:'打卡'};
+  var dateMap = {today:'11 月 23 日 周一', quad:'共 14 项未完成', month:'2026 年 11 月', list:'近 3 日', gantt:'11 月 18 – 27 日', habit:'11 月 · 完成率 78%'};
+
+  /* 视图切换 */
+  function setView(v){
+    document.querySelectorAll('.view').forEach(function(s){ s.classList.toggle('on', s.id === 'v-'+v); });
+    document.querySelectorAll('#viewSeg button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === v); });
+    document.querySelectorAll('.mobtab button').forEach(function(b){ b.classList.toggle('on', b.dataset.v === v); });
+    document.getElementById('pageTitle').textContent = titleMap[v];
+    document.getElementById('pageDate').textContent = dateMap[v];
+    document.querySelectorAll('.rail button').forEach(function(b){
+      b.classList.toggle('on', b.dataset.v === v);
+    });
+    closeDrawer();
+  }
+  document.getElementById('viewSeg').addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(b) setView(b.dataset.v);
+  });
+  document.querySelector('.mobtab').addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(b) setView(b.dataset.v);
+  });
+  document.querySelector('.rail').addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(b && b.dataset.v) setView(b.dataset.v);
+  });
+
+  /* 设备宽度 */
+  document.getElementById('devSeg').addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    document.querySelectorAll('#devSeg button').forEach(function(x){ x.classList.toggle('on', x === b); });
+    app.classList.toggle('is-mobile', b.dataset.d === 'mobile');
+  });
+  if (window.innerWidth < 768) {
+    app.classList.add('is-mobile');
+    document.querySelectorAll('#devSeg button').forEach(function(x){ x.classList.toggle('on', x.dataset.d === 'mobile'); });
+  }
+
+  /* 抽屉 */
+  var drawer = document.getElementById('drawer'), overlay = document.getElementById('overlay');
+  function openDrawer(){ drawer.classList.add('on'); overlay.classList.add('on'); }
+  function closeDrawer(){ drawer.classList.remove('on'); overlay.classList.remove('on'); }
+  document.addEventListener('click', function(e){
+    if (e.target.closest('[data-open]')) openDrawer();
+  });
+  document.getElementById('drawerClose').addEventListener('click', closeDrawer);
+  overlay.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeDrawer(); });
+
+  /* 复选框点按 */
+  document.addEventListener('click', function(e){
+    var cb = e.target.closest('.cb');
+    if (cb) { e.stopPropagation(); cb.classList.toggle('on'); cb.parentElement.classList.toggle('done'); }
+  });
+
+  /* 小时刻度 */
+  var hours = document.getElementById('hours'), html = '';
+  for (var h = 8; h <= 20; h++) { html += '<span style="top:'+((h-8)*56)+'px">'+String(h).padStart(2,'0')+':00</span>'; }
+  hours.innerHTML = html;
+  document.querySelectorAll('.week-body .hours > span').forEach(function(s){ s.style.top = (parseInt(s.style.top)+8)+'px'; });
+
+  /* 月网格：2026-11，周一起始 */
+  var mg = document.getElementById('monthGrid');
+  var events = {23:['ev:周会','td:写周报','ev:产品评审'],24:['ev:1:1','td:买猫粮'],25:['ev:季度复盘会'],
+                20:['ev:设计评审'],18:['td:交季度报告'],27:['ev:周会']};
+  var cells = [], start = 26; // 10/26 周一
+  var daysPrev = 31; // 10 月 31 天
+  for (var i = 0; i < 42; i++) {
+    var dayNum, out = false;
+    if (i < 6) { dayNum = 26 + i; out = true; }              // 10/26–10/31
+    else if (i - 5 <= 30) { dayNum = i - 5; }                 // 11/1–11/30
+    else { dayNum = i - 35; out = true; }                     // 12/1 起
+    var cls = 'mcell' + (out ? ' out' : '') + (dayNum === 23 && !out ? ' today' : '');
+    var inner = '<div class="dnum">' + dayNum + '</div>';
+    if (!out && events[dayNum]) {
+      events[dayNum].slice(0,2).forEach(function(it){
+        var kind = it.split(':')[0], name = it.split(':')[1];
+        inner += '<div class="item ' + (kind === 'td' ? 'todo' : '') + '">' + name + '</div>';
+      });
+      if (events[dayNum].length > 2) inner += '<div class="more">+' + (events[dayNum].length - 2) + '</div>';
+    }
+    cells.push('<div class="' + cls + '">' + inner + '</div>');
+  }
+  mg.innerHTML = cells.join('');
+
+  /* 热力图：12 周 × 7 行，确定性伪随机 */
+  function heat(seed, el, rate){
+    var out = '', i = 0;
+    for (var w = 0; w < 12; w++) {
+      var col = '<div class="hcol">';
+      for (var d = 0; d < 7; d++, i++) {
+        var x = Math.sin(i * 12.9898 + seed * 78.233) * 43758.5453;
+        var r = x - Math.floor(x);
+        var lvl = 0;
+        if (r < rate) lvl = r < rate * 0.25 ? 4 : r < rate * 0.5 ? 3 : r < rate * 0.78 ? 2 : 1;
+        col += '<div class="hc' + (lvl ? ' l' + lvl : '') + '"></div>';
+      }
+      out += col + '</div>';
+    }
+    document.getElementById(el).innerHTML = out;
+  }
+  heat(1.3, 'heat1', 0.92);
+  heat(4.7, 'heat2', 0.45);
+  heat(9.1, 'heat3', 0.22);
+
+  /* 便于直接链接到某个视图：?v=quad&device=mobile */
+  var q = new URLSearchParams(location.search);
+  if (q.get('v') && titleMap[q.get('v')]) setView(q.get('v'));
+  if (q.get('device') === 'mobile') {
+    app.classList.add('is-mobile');
+    document.querySelectorAll('#devSeg button').forEach(function(x){ x.classList.toggle('on', x.dataset.d === 'mobile'); });
+  }
+})();
+</script>
+</body>
+</html>

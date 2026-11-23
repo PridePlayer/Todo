@@ -1,0 +1,46 @@
+.center {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  color: var(--n-500);
+  font-size: var(--t-sm);
+  line-height: var(--lh-sm);
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--n-200);
+  border-top-color: var(--a-500);
+  border-radius: var(--r-pill);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.bootError {
+  color: var(--danger);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+}
+
+.retry {
+  height: 36px;
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  background: var(--n-0);
+  color: var(--n-800);
+  font-weight: 500;
+}
+
+.retry:hover {
+  background: var(--n-100);
+}

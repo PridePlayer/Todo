@@ -1,0 +1,26 @@
+{
+  "name": "grid",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "待办 + Outlook 日历 + 每日打卡，自托管，Android + Web",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @grid/server --filter @grid/web dev",
+    "dev:server": "pnpm --filter @grid/server dev",
+    "dev:web": "pnpm --filter @grid/web dev",
+    "build": "pnpm --filter @grid/web build && pnpm --filter @grid/server build",
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "pnpm --filter @grid/server db:migrate",
+    "seed:user": "pnpm --filter @grid/server seed:user",
+    "reset:password": "pnpm --filter @grid/server reset:password",
+    "healthcheck": "curl -fsS http://127.0.0.1:3000/api/healthz"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

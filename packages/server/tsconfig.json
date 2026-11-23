@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "rootDir": "src",
+    "outDir": "dist",
+    "noEmit": true,
+    // @node-rs/argon2 的 Algorithm 是 ambient const enum，开启 verbatimModuleSyntax 后无法访问。
+    // 这里关掉它换取直接使用该枚举，避免把 Argon2id 写成魔数 2。
+    "verbatimModuleSyntax": false
+  },
+  "include": ["src/**/*.ts"]
+}

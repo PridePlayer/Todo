@@ -1,0 +1,34 @@
+[Unit]
+Description=GRID API (todo)
+Documentation=https://github.com/<you>/todo
+# MySQL 实例名按宝塔多版本工具的实际服务名改，不存在就先注释掉这一行
+After=network.target mysql-8.0.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=www
+Group=www
+WorkingDirectory=/www/wwwroot/todo/packages/server
+EnvironmentFile=/www/wwwroot/todo/.env
+
+# 堆上限写死在 ExecStart 里，不靠环境变量 —— 这样 systemctl cat 一眼能看到真实生效值
+ExecStart=/usr/bin/node --max-old-space-size=256 dist/index.js
+
+Restart=always
+RestartSec=3
+# 内存上限兜底：单进程超过 512M 说明有泄漏，让它重启
+MemoryMax=512M
+
+# 日志
+StandardOutput=append:/www/log/grid/api.log
+StandardError=append:/www/log/grid/api.log
+
+# 安全加固（自托管最低配）
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,33 @@
+# 本地开发用 MySQL 8.0（可选）。
+# 只有在你想「本地就和生产同构」时才需要 Docker：
+#   docker compose -f docker-compose.dev.yml up -d
+# 然后把 .env 里的 DB_URL 改成：
+#   DB_URL=mysql://grid_rw:devpass@127.0.0.1:3307/grid
+#
+# 不需要 Docker 时完全无视本文件 —— 默认的 sqlite 驱动足够开发。
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: grid-dev-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --innodb-buffer-pool-size=128M
+      - --performance-schema=OFF
+      - --max-connections=20
+      - --default-time-zone=+08:00
+    environment:
+      MYSQL_ROOT_PASSWORD: devroot
+      MYSQL_DATABASE: grid
+      MYSQL_USER: grid_rw
+      MYSQL_PASSWORD: devpass
+    ports:
+      # 只映射到本机回环，别用 0.0.0.0
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - grid-dev-mysql:/var/lib/mysql
+
+volumes:
+  grid-dev-mysql:
