@@ -18,6 +18,12 @@ function when(ts: number | null): string {
   return `${d.getMonth() + 1}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** 本地日期。不走 toLocaleDateString：Hermes 的 Intl 覆盖不全，部分设备会返回英文格式 */
+function shortDate(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function SettingsScreen() {
   const { auth, phase, pending, lastSyncAt, lastError, apiBase, refresh, signOut, changeApiBase, snapshot } = useApp();
   const [draft, setDraft] = useState(apiBase);
@@ -53,7 +59,7 @@ export default function SettingsScreen() {
           <Text style={styles.value}>{auth?.email ?? '未登录'}</Text>
           {auth ? (
             <Text style={styles.hint}>
-              设备令牌到期：{new Date(auth.expiresAt).toLocaleDateString('zh-CN')}
+              设备令牌到期：{shortDate(auth.expiresAt)}
               （临期会自动续，不需要你操作）
             </Text>
           ) : null}
