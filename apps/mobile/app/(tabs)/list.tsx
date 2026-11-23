@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { describeRrule, formatDateLabel } from '@grid/core';
 import { GanttChart, type GanttItem } from '../../src/components/GanttChart';
 import { useApp } from '../../src/store';
 import { C, FONT, HIT, SP } from '../../src/theme';
@@ -17,8 +18,15 @@ export default function ListScreen() {
   const { snapshot, toggleTask } = useApp();
   const router = useRouter();
   const [query, setQuery] = useState('');
+  const todayKey = (() => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  })();
   const [status, setStatus] = useState<Status>('open');
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  // 按日期查看：null = 全部
+  const [dateFilter, setDateFilter] = useState<string | null>(null);
   const [mode, setMode] = useState<GroupMode>('flat');
   // 甘特是列表的另一种排布，不是独立 tab：底部一排已经 5 个，再加一格就多一次跨页跳转
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -35,13 +43,23 @@ export default function ListScreen() {
       if (status === 'done' && task.completedAt === null) return false;
       if (tagFilter === NO_TAG && task.tagIds.length > 0) return false;
       if (tagFilter !== null && tagFilter !== NO_TAG && !task.tagIds.includes(tagFilter)) return false;
+      if (dateFilter !== null) {
+        const due = task.dueDate;
+        let startKey: string | null = null;
+        if (task.startAt !== null) {
+          const d = new Date(task.startAt);
+          const pad = (n: number) => String(n).padStart(2, '0');
+          startKey = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        }
+        if (due !== dateFilter && startKey !== dateFilter) return false;
+      }
       if (q) {
         const haystack = `${task.title} ${task.note ?? ''}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
     });
-  }, [snapshot.tasks, status, tagFilter, query]);
+  }, [snapshot.tasks, status, tagFilter, dateFilter, query]);
 
   /**
    * 按标签分组。
@@ -52,7 +70,13 @@ export default function ListScreen() {
    */
   const sections = useMemo(() => {
     if (mode === 'flat') {
-      const sorted = [...filtered].sort((a, b) => a.quadrant - b.quadrant || a.sortOrder - b.sortOrder);
+      const sorted = [...filtered].sort((a, b) => {
+        // 完成的按完成时间倒序排到最前，未完成的仍按象限/手动顺序
+        const av = a.completedAt ?? -1;
+        const bv = b.completedAt ?? -1;
+        if (av !== bv) return bv - av;
+        return a.quadrant - b.quadrant || a.sortOrder - b.sortOrder;
+      });
       return [{ key: 'all', title: '', data: sorted }];
     }
     const map = new Map<string, typeof filtered>();
@@ -156,6 +180,32 @@ export default function ListScreen() {
         </Pressable>
       </View>
 
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dateScroll} contentContainerStyle={styles.dateRow}>
+        {[
+          { label: '全部日期', value: null as string | null },
+          { label: '今日', value: todayKey },
+          {
+            label: '明日',
+            value: (() => {
+              const d = new Date();
+              d.setDate(d.getDate() + 1);
+              const pad = (n: number) => String(n).padStart(2, '0');
+              return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            })(),
+          },
+        ].map((opt) => (
+          <Pressable
+            key={opt.label}
+            onPress={() => setDateFilter(opt.value)}
+            style={[styles.chip, dateFilter === opt.value && styles.chipOn]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: dateFilter === opt.value }}
+          >
+            <Text style={[styles.chipText, dateFilter === opt.value && styles.chipTextOn]}>{opt.label}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -236,8 +286,15 @@ export default function ListScreen() {
                       {task.title}
                     </Text>
                     <View style={styles.metaRow}>
-                      {task.rrule ? <Text style={styles.metaRepeat}>↻ 重复</Text> : null}
-                      {task.dueDate ? <Text style={styles.meta}>{task.dueDate}</Text> : null}
+                      {(() => {
+                        const repeat = describeRrule(task.rrule);
+                        return repeat ? <Text style={styles.metaRepeat}>↻ {repeat}</Text> : null;
+                      })()}
+                      {task.dueDate ? (
+                        <Text style={[styles.meta, task.dueDate === todayKey && styles.metaToday]}>
+                          {formatDateLabel(task.dueDate)}
+                        </Text>
+                      ) : null}
                       {task.tagIds
                         .slice(0, 3)
                         .map((id) => {
@@ -300,6 +357,9 @@ const styles = StyleSheet.create({
   spacer: { flex: 1 },
   // 高度写死：横向 ScrollView 会按内容撑开，chips 高度一变整条就跳，
   // 表现为"标签突然变高"。固定 48 与 chips 的 34 高对齐居中。
+  dateScroll: { height: 44 },
+  dateRow: { gap: SP[2], paddingHorizontal: SP[4], alignItems: 'center', height: '100%' },
+  metaToday: { color: C.a500, fontWeight: '600' },
   tagScroll: { height: 48 },
   tagRow: { gap: SP[2], paddingHorizontal: SP[4], alignItems: 'center', height: '100%' },
   chip: {

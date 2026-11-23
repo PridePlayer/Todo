@@ -70,6 +70,7 @@ export interface NewTaskInput {
   tagIds?: string[];
   note?: string | null;
   listId?: string;
+  location?: string | null;
 }
 
 interface AppState {
@@ -88,6 +89,7 @@ interface AppState {
   toggleTask: (id: string) => Promise<void>;
   createTask: (input: NewTaskInput) => Promise<string>;
   patchTask: (id: string, patch: Record<string, unknown>) => Promise<void>;
+  patchHabit: (id: string, patch: Partial<Habit>) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   ensureTag: (name: string) => Promise<Tag>;
   checkHabit: (habitId: string, logDate: string, delta: number) => Promise<void>;
@@ -374,7 +376,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       startAt: input.startAt ?? null,
       endAt: null,
       allDay: input.startAt == null,
-      location: null,
+      location: input.location ?? null,
       tagIds: input.tagIds ?? [],
       completedAt: null,
       archivedAt: null,
@@ -463,6 +465,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setPending((n) => n + 1);
     void refresh();
   }, [refresh, snapshot.tasks]);
+
+  /** 改习惯（目标值、排期、名称）。与 patchTask 同一套字段掩码语义 */
+  const patchHabit = useCallback(async (id: string, patch: Partial<Habit>) => {
+    const habit = snapshot.habits.find((h) => h.id === id);
+    if (!habit) return;
+    const device = await ensureDeviceId();
+    const next: Habit = { ...habit, ...patch, updatedAt: Date.now() };
+    const fields: Record<string, unknown> = { ...patch };
+    const base: Record<string, unknown> = {};
+    for (const key of Object.keys(patch)) {
+      base[key] = (habit as unknown as Record<string, unknown>)[key];
+    }
+    await putRow('habit', id, habit.rev, next as unknown as Record<string, unknown>);
+    await queueOp({
+      opId: ulid(),
+      table: 'habit',
+      action: 'update',
+      id,
+      baseRev: habit.rev,
+      fields,
+      base,
+      hlc: nextHlc(device),
+    });
+    setSnapshot((prev) => ({ ...prev, habits: prev.habits.map((h) => (h.id === id ? next : h)) }));
+    setPending((n) => n + 1);
+    void refresh();
+  }, [refresh, snapshot.habits]);
 
   /**
    * 找标签或建标签。
@@ -596,6 +625,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleTask,
       createTask,
       patchTask,
+      patchHabit,
       deleteTask,
       ensureTag,
       checkHabit,
@@ -617,6 +647,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleTask,
       createTask,
       patchTask,
+      patchHabit,
       deleteTask,
       ensureTag,
       checkHabit,

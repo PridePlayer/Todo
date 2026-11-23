@@ -22,7 +22,7 @@ import styles from './AllTasks.module.css';
 const ROW_H = 48;
 
 type StatusFilter = 'open' | 'done' | 'all';
-type SortMode = 'manual' | 'created' | 'priority';
+type SortMode = 'manual' | 'created' | 'priority' | 'completed';
 
 interface Row {
   task: Task;
@@ -36,6 +36,7 @@ const SORT_LABEL: Record<SortMode, string> = {
   manual: '手动排序',
   created: '创建时间',
   priority: '优先级',
+  completed: '完成时间',
 };
 
 export function AllTasksView() {
@@ -45,6 +46,8 @@ export function AllTasksView() {
   const [status, setStatus] = useState<StatusFilter>('open');
   const [sort, setSort] = useState<SortMode>('manual');
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  // 按日期查看：看"今天要做什么"而不是全部待办。null = 不筛日期
+  const [dateFilter, setDateFilter] = useState<string | null>(null);
   // 拖拽到标签上给任务打标签。只在 hover 到某个标签时置位，
   // 用来在拖动过程中给目标一个"放这里"的高亮 —— 没有它，
   // 用户不知道鼠标悬停的那个 chips 到底收不收。
@@ -88,6 +91,13 @@ export function AllTasksView() {
         if (a.priority !== b.priority) return b.priority - a.priority;
         return compareTasks(a, b);
       }
+      // 按完成时间倒序：最近完成的在最上面。未完成的排最后（它们没有 completedAt）
+      if (sort === 'completed') {
+        const av = a.completedAt ?? -1;
+        const bv = b.completedAt ?? -1;
+        if (av !== bv) return bv - av;
+        return compareTasks(a, b);
+      }
       return compareTasks(a, b);
     },
     [sort],
@@ -99,6 +109,16 @@ export function AllTasksView() {
       status === 'all' ||
       (status === 'open' ? task.completedAt === null : task.completedAt !== null);
     const tagOk = (task: Task) => tagFilter === null || task.tagIds.includes(tagFilter);
+    const dateOk = (task: Task) => {
+      if (dateFilter === null) return true;
+      if (task.dueDate === dateFilter) return true;
+      if (task.startAt !== null) {
+        const d = new Date(task.startAt);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        return key === dateFilter;
+      }
+      return false;
+    };
     const textOk = (task: Task) =>
       needle === '' ||
       task.title.toLowerCase().includes(needle) ||
@@ -107,24 +127,24 @@ export function AllTasksView() {
     if (needle !== '') {
       // 搜索时拍平：层级会让结果更难扫，这里优先"找到"
       return alive
-        .filter((task) => statusOk(task) && tagOk(task) && textOk(task))
+        .filter((task) => statusOk(task) && tagOk(task) && dateOk(task) && textOk(task))
         .sort(sorter)
         .map((task) => ({ task, indent: 0, childCount: 0, collapsed: false }));
     }
 
     const out: Row[] = [];
     const walk = (task: Task, indent: number) => {
-      const kids = (byParent.get(task.id) ?? []).filter((t) => statusOk(t) && tagOk(t));
+      const kids = (byParent.get(task.id) ?? []).filter((t) => statusOk(t) && tagOk(t) && dateOk(t));
       out.push({ task, indent, childCount: kids.length, collapsed: collapsed.has(task.id) });
       if (kids.length > 0 && !collapsed.has(task.id)) {
         for (const kid of [...kids].sort(sorter)) walk(kid, indent + 1);
       }
     };
-    for (const root of [...(byParent.get(null) ?? [])].filter((t) => statusOk(t) && tagOk(t)).sort(sorter)) {
+    for (const root of [...(byParent.get(null) ?? [])].filter((t) => statusOk(t) && tagOk(t) && dateOk(t)).sort(sorter)) {
       walk(root, 0);
     }
     return out;
-  }, [alive, byParent, collapsed, query, sort, sorter, status, tagFilter]);
+  }, [alive, byParent, collapsed, query, sort, sorter, status, tagFilter, dateFilter]);
 
   const drawerTask = useMemo(
     () => alive.find((task) => task.id === drawerId) ?? null,
@@ -214,6 +234,56 @@ export function AllTasksView() {
           </select>
         </div>
       </header>
+
+      <div className={styles.dateBar} role="group" aria-label="按日期查看">
+        {(() => {
+          const pad = (n: number) => String(n).padStart(2, '0');
+          const key = (offset: number) => {
+            const d = new Date();
+            d.setDate(d.getDate() + offset);
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+          };
+          const today = key(0);
+          return (
+            <>
+              <button
+                type="button"
+                className={styles.dateChip}
+                data-on={dateFilter === null}
+                aria-pressed={dateFilter === null}
+                onClick={() => setDateFilter(null)}
+              >
+                全部日期
+              </button>
+              <button
+                type="button"
+                className={styles.dateChip}
+                data-on={dateFilter === today}
+                aria-pressed={dateFilter === today}
+                onClick={() => setDateFilter(dateFilter === today ? null : today)}
+              >
+                今天
+              </button>
+              <button
+                type="button"
+                className={styles.dateChip}
+                data-on={dateFilter === key(1)}
+                aria-pressed={dateFilter === key(1)}
+                onClick={() => setDateFilter(dateFilter === key(1) ? null : key(1))}
+              >
+                明天
+              </button>
+              <input
+                type="date"
+                className={styles.dateInput}
+                value={dateFilter ?? ''}
+                aria-label="按日期筛选"
+                onChange={(event) => setDateFilter(event.target.value || null)}
+              />
+            </>
+          );
+        })()}
+      </div>
 
       {tagMap.size > 0 ? (
         <div className={styles.tagBar} role="group" aria-label="按标签筛选">

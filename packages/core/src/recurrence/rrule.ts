@@ -257,3 +257,59 @@ function base(partial: Partial<Rule>): Rule {
     ...partial,
   };
 }
+
+
+const WEEKDAY_CN: Record<Weekday, string> = { MO: '一', TU: '二', WE: '三', TH: '四', FR: '五', SA: '六', SU: '日' };
+
+/**
+ * 把规则翻译成人话，给列表行显示"↻ 每周一三五"这类小标。
+ *
+ * 刻意只覆盖 buildRrule 产出的那几类：能拼出任意 RRULE 的地方不止一处，
+ * 但**只认这几种**，认不出就返回"重复"而不是瞎猜 —— 猜错的代价是
+ * 用户以为"每周"，实际是"每两周"，于是漏掉一次。
+ */
+export function describeRrule(rrule: string | null): string | null {
+  if (!rrule) return null;
+  let rule: Rule;
+  try {
+    rule = parseRrule(rrule);
+  } catch {
+    return '重复';
+  }
+
+  const every = rule.interval > 1 ? `每 ${rule.interval} 个` : '';
+  let body: string;
+  switch (rule.freq) {
+    case 'DAILY':
+      body = `${every || '每'}天`;
+      break;
+    case 'WEEKLY': {
+      const days = (rule.byDay ?? []).map((d) => WEEKDAY_CN[d]).join('');
+      body = days ? `${every || '每'}周${days}` : `${every || '每'}周`;
+      break;
+    }
+    case 'MONTHLY': {
+      if (rule.bySetPos === -1 && (rule.byDay?.length ?? 0) > 0) {
+        body = `每月最后一个${WEEKDAY_CN[rule.byDay![0]!]}`;
+      } else if (rule.byMonthDay && rule.byMonthDay.length > 0) {
+        body = `${every || '每'}月${rule.byMonthDay.join('、')}日`;
+      } else {
+        body = `${every || '每'}月`;
+      }
+      break;
+    }
+    case 'YEARLY':
+      body = `${every || '每'}年`;
+      break;
+    default:
+      return '重复';
+  }
+
+  const suffix = rule.count !== null ? `，共 ${rule.count} 次` : rule.until !== null ? `，到 ${formatDate(rule.until)}` : '';
+  return body + suffix;
+}
+
+function formatDate(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}

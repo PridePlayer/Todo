@@ -5,7 +5,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   /* 四行：标题 / 标签条 / 新增条 / 列表。标签条单独一行而不是塞进标题区，
      是因为标签数量不可控，塞进去会把搜索框挤到换行 */
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
 }
 
 .head {
@@ -87,9 +87,45 @@
   color: var(--n-700);
 }
 
-.tagBar {
+.dateBar {
   grid-column: 1;
   grid-row: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-4) var(--sp-2);
+}
+
+.dateChip {
+  height: 24px;
+  padding: 0 var(--sp-2);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  background: var(--n-0);
+  font-size: var(--t-sm);
+  color: var(--n-600);
+  white-space: nowrap;
+}
+
+.dateChip[data-on='true'] {
+  background: var(--n-900);
+  border-color: var(--n-900);
+  color: var(--n-0);
+}
+
+.dateInput {
+  height: 24px;
+  padding: 0 var(--sp-2);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  background: var(--n-0);
+  font-size: var(--t-sm);
+  color: var(--n-700);
+}
+
+.tagBar {
+  grid-column: 1;
+  grid-row: 3;
   display: flex;
   gap: var(--sp-1);
   padding: 0 var(--sp-4) var(--sp-2);
@@ -129,12 +165,12 @@
 
 .quickSlot {
   grid-column: 1;
-  grid-row: 3;
+  grid-row: 4;
 }
 
 .list {
   grid-column: 1;
-  grid-row: 4;
+  grid-row: 5;
   min-height: 0;
   border-top: var(--line);
 }

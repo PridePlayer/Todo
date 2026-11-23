@@ -20,6 +20,7 @@ import {
 } from '@grid/core';
 import { useEffect, useRef, useState } from 'react';
 import { Checkbox } from './Checkbox';
+import { TagPicker } from './TagPicker';
 import { TagChip } from './TagChip';
 import styles from './Drawer.module.css';
 
@@ -98,6 +99,9 @@ export function Drawer({
   const [repeatFreq, setRepeatFreq] = useState<RepeatFreq>('none');
   const [repeatDays, setRepeatDays] = useState<Weekday[]>([]);
   const [repeatCount, setRepeatCount] = useState<number | null>(null);
+  // 次数与截止日期互斥：两条同时写进 RRULE 会让"以先到者为准"变成隐式行为，
+  // 用户看到 COUNT=5 和 UNTIL=12-31 无法判断到底停在哪
+  const [repeatUntil, setRepeatUntil] = useState<string>('');
 
   // 切到别的任务时重新解析。三个都做成受控 state 是因为"改周几"要立刻反映到按钮上，
   // 但它们又必须能从 task.rrule 还原 —— 直接算出来的值没法被用户改。
@@ -121,6 +125,7 @@ export function Drawer({
     setRepeatFreq(freq);
     setRepeatDays(days);
     setRepeatCount(parsed.count);
+    setRepeatUntil(parsed.until ? toDateInput(parsed.until) : '');
   }, [task.id, task.rrule]);
 
   /**
@@ -130,19 +135,21 @@ export function Drawer({
    * BYDAY 的顺序、INTERVAL=1 写不写、UNTIL 的 UTC 格式都容易出错，
    * 而 parseRrule 只能判断语法合法，判断不出"是不是你要的那条"。
    */
-  async function commitRepeat(freq: RepeatFreq, days: Weekday[], count: number | null) {
+  async function commitRepeat(freq: RepeatFreq, days: Weekday[], count: number | null, untilText: string) {
     if (freq === 'none') {
       await onPatch({ rrule: null });
       return;
     }
     if (freq === 'custom') return;
     const anchorDate = new Date(repeatAnchor);
+    const until = untilText ? new Date(`${untilText}T23:59:59`).getTime() : null;
     const rule = buildRrule({
       freq: freq === 'daily' ? 'DAILY' : freq === 'monthly' || freq === 'monthly-last-workday' ? 'MONTHLY' : freq === 'yearly' ? 'YEARLY' : 'WEEKLY',
       byDay: freq === 'weekly' ? days : freq === 'weekday' ? ['MO', 'TU', 'WE', 'TH', 'FR'] : freq === 'monthly-last-workday' ? ['FR'] : undefined,
       bySetPos: freq === 'monthly-last-workday' ? -1 : null,
       byMonthDay: freq === 'monthly' ? [anchorDate.getDate()] : undefined,
       count: count && count > 0 ? count : null,
+      until,
     });
     await onPatch({ rrule: rule });
   }
@@ -152,7 +159,7 @@ export function Drawer({
       ? repeatDays.filter((d) => d !== day)
       : [...repeatDays, day].sort((a, b) => WEEKDAYS.indexOf(a) - WEEKDAYS.indexOf(b));
     setRepeatDays(next);
-    void commitRepeat('weekly', next, repeatCount);
+    void commitRepeat('weekly', next, repeatCount, repeatUntil);
   }
 
   const canNest = task.depth < MAX_DEPTH - 1;
@@ -276,7 +283,7 @@ export function Drawer({
               // 首次切到"每周"默认勾上任务当天的星期，否则用户要多点一次才有结果
               const days = next === 'weekly' && repeatDays.length === 0 ? [weekdayOf(new Date(repeatAnchor))] : repeatDays;
               setRepeatDays(days);
-              void commitRepeat(next, days, repeatCount);
+              void commitRepeat(next, days, repeatCount, repeatUntil);
             }}
           >
             {REPEAT_OPTIONS.map((option) => (
@@ -322,9 +329,23 @@ export function Drawer({
                 const raw = event.target.value.trim();
                 setRepeatCount(raw === '' ? null : Math.max(0, Math.min(999, Number(raw) | 0)));
               }}
-              onBlur={() => void commitRepeat(repeatFreq, repeatDays, repeatCount)}
+              onBlur={() => void commitRepeat(repeatFreq, repeatDays, repeatCount, repeatUntil)}
             />
-            <span className={styles.hint} style={{ marginTop: 0 }}>次后停止（留空 = 一直）</span>
+            <span className={styles.hint} style={{ marginTop: 0 }}>次后停止</span>
+            <span className={styles.hint} style={{ marginTop: 0 }}>或截止于</span>
+            <input
+              type="date"
+              className={styles.control}
+              value={repeatUntil}
+              aria-label="重复截止日期，留空表示一直重复"
+              onChange={(event) => {
+                const value = event.target.value;
+                setRepeatUntil(value);
+                // 选了截止日期就清空次数，保持互斥
+                if (value !== '') setRepeatCount(null);
+                void commitRepeat(repeatFreq, repeatDays, value === '' ? repeatCount : null, value);
+              }}
+            />
           </div>
 
           <p className={styles.hint}>
@@ -368,40 +389,14 @@ export function Drawer({
 
         <section className={styles.field}>
           <span className={styles.label}>标签</span>
-          <div className={styles.tagRow}>
-            {task.tagIds.map((id) => {
-              const tag = tagMap.get(id);
-              if (!tag) return null;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  className={styles.tagButton}
-                  title={`移除 #${tag.name}`}
-                  onClick={() => void onRemoveTag(id)}
-                >
-                  <TagChip tag={tag} />
-                  <span className={styles.tagX} aria-hidden="true">
-                    ×
-                  </span>
-                </button>
-              );
-            })}
-            <input
-              className={styles.tagInput}
-              value={tagDraft}
-              placeholder="+ 标签"
-              aria-label="添加标签"
-              onChange={(event) => setTagDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter') return;
-                event.preventDefault();
-                const name = tagDraft.trim();
-                if (name === '') return;
-                void onAddTag(name).then(() => setTagDraft(''));
-              }}
-            />
-          </div>
+          {/* 用 TagPicker 而不是"输名字回车"：标签多了之后靠记忆拼写会拼错，
+              而拼错会静默生成一个新标签，界面上看着像重复项 */}
+          <TagPicker
+            tagMap={tagMap}
+            value={task.tagIds}
+            onChange={(next) => void onPatch({ tagIds: next })}
+            onCreate={onAddTag}
+          />
         </section>
 
         <section className={styles.field}>

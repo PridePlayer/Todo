@@ -18,6 +18,8 @@ export const C = {
   a100: '#edf1fa',
   a200: '#c8d3ee',
   a500: '#002fa7',
+  a600: '#00227a',
+  a700: '#001a5c',
   danger: '#c0311e',
   warn: '#a16207',
 } as const;

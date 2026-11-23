@@ -80,6 +80,8 @@ export const newTaskSchema = z.object({
   endAt: epochMs.nullable().default(null),
   location: z.string().max(256).nullable().default(null),
   tagIds: z.array(idLike).max(20).default([]),
+  /** 重复规则；创建时就可以带，不必先建再改 */
+  rrule: z.string().max(512).nullable().default(null),
 });
 
 export type NewTask = z.input<typeof newTaskSchema>;

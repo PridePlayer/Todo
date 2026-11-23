@@ -200,6 +200,7 @@ export {
   formatRrule,
   rruleFromPreset,
   buildRrule,
+  describeRrule,
   toIcalDate,
   weekdayOf,
   weekdayIndex,

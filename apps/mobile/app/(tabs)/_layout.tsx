@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
 import { ActivityIndicator, Text, View } from 'react-native';
+import { Fab } from '../../src/components/Fab';
 import { useApp } from '../../src/store';
 import { C, FONT } from '../../src/theme';
 
@@ -37,6 +38,7 @@ export default function TabsLayout() {
   if (!auth) return <Redirect href="/login" />;
 
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       screenOptions={({ route }) => ({
         headerShown: false,
@@ -71,5 +73,7 @@ export default function TabsLayout() {
         />
       ))}
     </Tabs>
+      <Fab />
+    </View>
   );
 }

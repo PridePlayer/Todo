@@ -1,0 +1,159 @@
+.wrap {
+  position: fixed;
+  right: var(--sp-6);
+  bottom: var(--sp-6);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-2);
+}
+
+.fab {
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: var(--a-500);
+  color: var(--n-0);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fab:hover {
+  background: var(--a-600);
+}
+
+.fab svg {
+  width: 22px;
+  height: 22px;
+}
+
+.card {
+  width: 360px;
+  background: var(--n-0);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.kinds {
+  display: flex;
+  gap: 1px;
+  background: var(--n-200);
+  border: 1px solid var(--n-200);
+}
+
+.kind {
+  flex: 1;
+  height: 26px;
+  background: var(--n-0);
+  font-size: var(--t-sm);
+  color: var(--n-600);
+}
+
+.kind[data-on='true'] {
+  background: var(--n-900);
+  color: var(--n-0);
+}
+
+.title {
+  height: 34px;
+  padding: 0 var(--sp-2);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  font-size: var(--t-body);
+  color: var(--n-900);
+}
+
+.title:focus,
+.control:focus {
+  outline: none;
+  border-color: var(--a-500);
+}
+
+.grid {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--t-xs);
+  color: var(--n-500);
+}
+
+.control {
+  height: 28px;
+  padding: 0 var(--sp-2);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  background: var(--n-0);
+  font-size: var(--t-sm);
+  color: var(--n-900);
+}
+
+.days {
+  display: flex;
+  gap: 1px;
+  background: var(--n-200);
+  border: 1px solid var(--n-200);
+}
+
+.day {
+  flex: 1;
+  height: 28px;
+  background: var(--n-0);
+  font-size: var(--t-xs);
+  color: var(--n-600);
+}
+
+.day[data-on='true'] {
+  background: var(--a-500);
+  color: var(--n-0);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+}
+
+.ghost {
+  height: 30px;
+  padding: 0 var(--sp-3);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  background: var(--n-0);
+  font-size: var(--t-sm);
+  color: var(--n-700);
+  cursor: pointer;
+}
+
+.primary {
+  height: 30px;
+  padding: 0 var(--sp-4);
+  border: none;
+  border-radius: var(--r-sm);
+  background: var(--a-500);
+  color: var(--n-0);
+  font-size: var(--t-sm);
+  cursor: pointer;
+}
+
+.primary:disabled {
+  background: var(--n-300);
+}

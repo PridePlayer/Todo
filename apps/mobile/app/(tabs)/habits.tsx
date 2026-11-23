@@ -1,6 +1,7 @@
 import { habitLogId, habitUnit, isScheduled, weekdayOfKey, type Habit } from '@grid/core';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '../../src/store';
 import { C, FONT, HIT, SP } from '../../src/theme';
@@ -13,6 +14,7 @@ function todayKey(): string {
 
 export default function HabitsScreen() {
   const { snapshot, checkHabit, phase } = useApp();
+  const router = useRouter();
   const [dayKey] = useState(todayKey);
 
   const due = useMemo(() => {
@@ -69,6 +71,7 @@ export default function HabitsScreen() {
               // 而只给"已达标可撤销"就永远清不掉中间态
               void checkHabit(item.id, dayKey, -valueOf(item.id));
             }}
+            onOpen={() => router.push(`/habit/${item.id}`)}
           />
         )}
       />
@@ -82,7 +85,7 @@ function stepOf(habit: Habit): number {
   return 1;
 }
 
-function HabitRow({ habit, value, onPress, onReset }: { habit: Habit; value: number; onPress: () => void; onReset: () => void }) {
+function HabitRow({ habit, value, onPress, onReset, onOpen }: { habit: Habit; value: number; onPress: () => void; onReset: () => void; onOpen: () => void }) {
   const reached = value >= habit.target;
   const unit = habitUnit(habit);
   const pct = habit.target > 0 ? Math.min(1, value / habit.target) : value > 0 ? 1 : 0;
@@ -104,20 +107,22 @@ function HabitRow({ habit, value, onPress, onReset }: { habit: Habit; value: num
         {reached ? <Text style={styles.markText}>✓</Text> : null}
       </View>
 
-      <View style={styles.rowBody}>
+      <Pressable style={styles.rowBody} onPress={onOpen} accessibilityRole="button" accessibilityLabel={`打开「${habit.name}」的详情`}>
         <Text style={[styles.name, reached && styles.nameDone]} numberOfLines={1}>
           {habit.name}
         </Text>
         <View style={styles.bar}>
           <View style={[styles.barFill, { width: `${Math.round(pct * 100)}%` }, reached && styles.barFillDone]} />
         </View>
-      </View>
+      </Pressable>
 
+      <Pressable onPress={onOpen} accessibilityRole="button" accessibilityLabel="查看统计">
       <Text style={styles.progress}>
         {value}
         <Text style={styles.progressTarget}>/{habit.target}</Text>
         <Text style={styles.unit}> {unit}</Text>
       </Text>
+      </Pressable>
     </Pressable>
   );
 }

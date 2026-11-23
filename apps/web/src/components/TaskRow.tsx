@@ -1,4 +1,4 @@
-import { isOverdue, taskMetaText, type Tag, type Task } from '@grid/core';
+import { describeRrule, isOverdue, taskMetaText, type Tag, type Task } from '@grid/core';
 import { useState } from 'react';
 import { Checkbox } from './Checkbox';
 import { TagChip } from './TagChip';
@@ -111,6 +111,15 @@ export function TaskRow({
       {tags.slice(0, 2).map((tag) => (
         <TagChip key={tag.id} tag={tag} />
       ))}
+
+      {(() => {
+        const repeat = describeRrule(task.rrule);
+        return repeat ? (
+          <span className={styles.repeat} title={`重复：${repeat}`}>
+            ↻ {repeat}
+          </span>
+        ) : null;
+      })()}
 
       {childCount > 0 ? <span className={styles.count}>{childCount}</span> : null}
 

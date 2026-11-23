@@ -105,9 +105,10 @@ export function formatDateLabel(dateStr: string, now: number = Date.now()): stri
   const target = dayIndex(new Date(`${dateStr}T00:00:00`).getTime());
   const today = dayIndex(now);
   const diff = target - today;
-  if (diff === 0) return '今天';
-  if (diff === 1) return '明天';
-  if (diff === -1) return '昨天';
+  // 用今日/明日：这类日期标签常和导航文案同时出现，措辞要能一眼分开
+  if (diff === 0) return '今日';
+  if (diff === 1) return '明日';
+  if (diff === -1) return '昨日';
   const d = new Date(`${dateStr}T00:00:00`);
   const sameYear = d.getFullYear() === new Date(now).getFullYear();
   return sameYear ? `${d.getMonth() + 1}月${d.getDate()}日` : `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;

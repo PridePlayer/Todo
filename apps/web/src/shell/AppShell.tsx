@@ -4,6 +4,7 @@ import { useSyncStatus } from '../hooks/useSync';
 import { startAutoSync, syncNow, type SyncStatus } from '../sync/engine';
 import { AllTasksView } from '../views/AllTasks';
 import { CalendarView } from '../views/calendar/CalendarView';
+import { Fab } from '../components/Fab';
 import { GanttView } from '../views/Gantt';
 import { HabitsView } from '../views/Habits';
 import { QuadrantView } from '../views/Quadrant';
@@ -168,6 +169,7 @@ export function AppShell({ user, onLogout }: AppShellProps) {
           {view === 'habits' ? <HabitsView /> : null}
           {view === 'all' ? <AllTasksView /> : null}
           {view === 'settings' ? <Settings user={user} /> : null}
+          <Fab />
         </main>
 
         <nav className={styles.mobtab} aria-label="底部导航">

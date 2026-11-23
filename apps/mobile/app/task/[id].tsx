@@ -32,6 +32,11 @@ const REPEAT_LABEL: { key: RrulePreset | 'none'; label: string }[] = [
 function dateKey(offsetDays = 0): string {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
+  return dateInput(d.getTime());
+}
+
+function dateInput(ts: number): string {
+  const d = new Date(ts);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
@@ -49,6 +54,7 @@ export default function TaskDetailScreen() {
   // 必须在这里声明，不能放到 early return 之后：hooks 的数量在每次渲染里都要一致，
   // task 不存在时提前 return 会让两者不等，React 直接抛 "Rendered fewer hooks"
   const [repeatDays, setRepeatDays] = useState<Weekday[]>([]);
+  const [repeatUntil, setRepeatUntil] = useState('');
 
   // 同步拉取可能在详情页打开后才把这条写进来，等它到了再填一次
   useEffect(() => {
@@ -58,6 +64,7 @@ export default function TaskDetailScreen() {
     setDueDate(task.dueDate ?? '');
     // 同步拉取可能在页面打开后才改了规则，这里要跟着刷
     setRepeatDays(task.rrule ? (parseRrule(task.rrule).byDay ?? []) : []);
+    setRepeatUntil(task.rrule && parseRrule(task.rrule).until ? dateInput(task.rrule ? parseRrule(task.rrule).until! : 0) : '');
   }, [task?.id, task?.rrule]);
 
   if (!task) {
@@ -102,20 +109,26 @@ export default function TaskDetailScreen() {
     void patchTask(task!.id, { dueDate: value });
   }
 
-  function applyRepeat(preset: RrulePreset | 'none') {
+  function commitRepeat(preset: RrulePreset | 'none', days: Weekday[]) {
     const anchor = dueDate ? new Date(`${dueDate}T09:00:00`).getTime() : Date.now();
+    const d = new Date(anchor);
     // "每周"要保留用户已勾的星期：否则一碰下拉框就退回"按当天星期"，
     // 周一勾选的"每周三"会被静默改掉
     const rrule =
       preset === 'none'
         ? null
-        : preset === 'weekly'
-          ? buildRrule({
-              freq: 'WEEKLY',
-              byDay: repeatDays.length > 0 ? repeatDays : [weekdayOf(new Date(anchor))],
-            })
-          : rruleFromPreset(preset, anchor);
+        : buildRrule({
+            freq: preset === 'daily' ? 'DAILY' : preset === 'monthly' || preset === 'monthly-last-workday' ? 'MONTHLY' : preset === 'yearly' ? 'YEARLY' : 'WEEKLY',
+            byDay: preset === 'weekly' ? (days.length > 0 ? days : [weekdayOf(d)]) : preset === 'weekday' ? ['MO', 'TU', 'WE', 'TH', 'FR'] : preset === 'monthly-last-workday' ? ['FR'] : undefined,
+            bySetPos: preset === 'monthly-last-workday' ? -1 : null,
+            byMonthDay: preset === 'monthly' ? [d.getDate()] : undefined,
+            until: repeatUntil ? new Date(`${repeatUntil}T23:59:59`).getTime() : null,
+          });
     void patchTask(task!.id, { rrule });
+  }
+
+  function applyRepeat(preset: RrulePreset | 'none') {
+    commitRepeat(preset, repeatDays);
   }
 
   function toggleRepeatDay(day: Weekday) {
@@ -123,14 +136,7 @@ export default function TaskDetailScreen() {
       ? repeatDays.filter((d) => d !== day)
       : [...repeatDays, day].sort((a, b) => WEEKDAYS.indexOf(a) - WEEKDAYS.indexOf(b));
     setRepeatDays(next);
-    const anchor = dueDate ? new Date(`${dueDate}T09:00:00`).getTime() : Date.now();
-    void patchTask(task!.id, {
-      // 全部取消勾选时退回"按当天星期"，而不是留下 FREQ=WEEKLY;BYDAY= 空值
-      rrule: buildRrule({
-        freq: 'WEEKLY',
-        byDay: next.length > 0 ? next : [weekdayOf(new Date(anchor))],
-      }),
-    });
+    commitRepeat('weekly', next);
   }
 
   function toggleTag(tagId: string) {
@@ -302,6 +308,20 @@ export default function TaskDetailScreen() {
               })}
             </View>
           )}
+
+          <View style={[styles.row, { marginTop: SP[2], alignItems: 'center' }]}>
+            <Text style={[styles.hint, { marginTop: 0 }]}>截止于</Text>
+            <TextInput
+              value={repeatUntil}
+              onChangeText={setRepeatUntil}
+              onBlur={() => commitRepeat(currentPreset === 'weekly-custom' ? 'weekly' : (currentPreset as RrulePreset | 'none'), repeatDays)}
+              placeholder="YYYY-MM-DD，留空一直重复"
+              placeholderTextColor={C.n400}
+              style={[styles.input, { flex: 1, marginTop: 0 }]}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
 
           <Text style={styles.hint}>
             重复以第一条的日期为锚点。改日期后再点一次重复，才会按新日期重算。

@@ -265,3 +265,10 @@
   white-space: nowrap;
   border: 0;
 }
+
+.repeat {
+  flex: none;
+  font-size: var(--t-xs);
+  color: var(--a-500);
+  white-space: nowrap;
+}

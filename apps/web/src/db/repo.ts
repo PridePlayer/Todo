@@ -247,7 +247,7 @@ export class LocalTaskStore implements TaskStore {
       completedAt: null,
       archivedAt: null,
       sortOrder: await maxSortOrderIn(quadrant, parent?.id ?? null),
-      rrule: null,
+      rrule: parsed.rrule,
       remindAt: null,
       createdAt: t,
       updatedAt: t,
