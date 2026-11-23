@@ -30,7 +30,7 @@ step "4/5 构建"
 # 这个文件就躺在构建产物目录里：vite 清空 outDir 时会对它调 readdir，
 # 报 ENOTDIR，整个构建中断，报错长得完全不像"多了一个文件"。
 # .user.ini 只对 PHP 生效，纯静态站点毫无作用，直接清掉。
-# （根治办法是把站点根目录改回默认，见 docs/09 §7.6。）
+# （根治办法是在宝塔里关掉「防跨站攻击」，见 docs/09 §7.6。）
 if [ -e apps/web/dist/.user.ini ]; then
   printf '  · 清理构建目录里的宝塔 .user.ini\n'
   chattr -i apps/web/dist/.user.ini 2>/dev/null || true
