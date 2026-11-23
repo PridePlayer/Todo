@@ -4,12 +4,13 @@ import { useSyncStatus } from '../hooks/useSync';
 import { startAutoSync, syncNow, type SyncStatus } from '../sync/engine';
 import { AllTasksView } from '../views/AllTasks';
 import { CalendarView } from '../views/calendar/CalendarView';
+import { GanttView } from '../views/Gantt';
 import { HabitsView } from '../views/Habits';
 import { QuadrantView } from '../views/Quadrant';
 import { Settings } from '../views/Settings';
 import styles from './AppShell.module.css';
 
-type ViewKey = 'quadrant' | 'calendar' | 'habits' | 'all' | 'settings';
+type ViewKey = 'quadrant' | 'calendar' | 'gantt' | 'habits' | 'all' | 'settings';
 
 const VIEWS: { key: ViewKey; label: string; title: string; path: string }[] = [
   {
@@ -31,6 +32,13 @@ const VIEWS: { key: ViewKey; label: string; title: string; path: string }[] = [
     label: '日历',
     title: '日历',
     path: 'M4 6h16v14H4zM4 10h16M9 3v4M15 3v4',
+  },
+  {
+    key: 'gantt',
+    label: '甘特',
+    title: '甘特',
+    // 条形 + 时间轴：语义上是"把待办摊到时间上"，不是图表
+    path: 'M3 18h4v-5H3zM10 18h4V9h-4zM17 18h4v-8h-4zM3 6h18',
   },
   {
     key: 'habits',
@@ -156,6 +164,7 @@ export function AppShell({ user, onLogout }: AppShellProps) {
         <main className={styles.content}>
           {view === 'quadrant' ? <QuadrantView /> : null}
           {view === 'calendar' ? <CalendarView /> : null}
+          {view === 'gantt' ? <GanttView /> : null}
           {view === 'habits' ? <HabitsView /> : null}
           {view === 'all' ? <AllTasksView /> : null}
           {view === 'settings' ? <Settings user={user} /> : null}

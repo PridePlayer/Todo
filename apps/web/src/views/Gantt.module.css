@@ -1,0 +1,236 @@
+.view {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-4) var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.title {
+  margin-top: var(--sp-1);
+  font-size: var(--t-lg);
+  line-height: var(--lh-lg);
+  letter-spacing: -0.01em;
+}
+
+.sub {
+  margin-top: var(--sp-1);
+  font-size: var(--t-sm);
+  color: var(--n-500);
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.segment {
+  height: 26px;
+  padding: 0 var(--sp-2);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  background: var(--n-0);
+  font-size: var(--t-sm);
+  color: var(--n-600);
+}
+
+.segment:hover {
+  background: var(--n-50);
+}
+
+.segment[data-on='true'] {
+  background: var(--n-900);
+  border-color: var(--n-900);
+  color: var(--n-0);
+}
+
+.board {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border-top: var(--line);
+}
+
+.inner {
+  position: relative;
+  min-width: 100%;
+}
+
+.headRow {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--n-0);
+  border-bottom: var(--line);
+}
+
+.headName {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  width: var(--name-w, 240px);
+  flex: none;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--n-0);
+  border-right: var(--line);
+  font-size: var(--t-sm);
+  color: var(--n-500);
+}
+
+.headTicks {
+  display: flex;
+  flex: none;
+}
+
+.tick {
+  flex: none;
+  padding: var(--sp-2) 0 var(--sp-2) var(--sp-2);
+  border-left: 1px solid var(--n-100);
+  font-size: var(--t-xs);
+  color: var(--n-500);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tick[data-today='true'] {
+  color: var(--n-900);
+  font-weight: 600;
+}
+
+.groupRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-3) var(--sp-1);
+  background: var(--n-50);
+  border-bottom: var(--line);
+  position: sticky;
+  left: 0;
+  width: max-content;
+  min-width: 100%;
+}
+
+.groupName {
+  font-size: var(--t-sm);
+  color: var(--n-700);
+  font-weight: 600;
+}
+
+.groupCount {
+  font-size: var(--t-xs);
+  color: var(--n-500);
+}
+
+.row {
+  display: flex;
+  min-height: 32px;
+  border-bottom: 1px solid var(--n-100);
+}
+
+.nameCell {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  width: var(--name-w, 240px);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-3);
+  background: var(--n-0);
+  border-right: var(--line);
+  cursor: pointer;
+}
+
+.nameCell:hover {
+  background: var(--n-50);
+}
+
+.nameText {
+  font-size: var(--t-sm);
+  color: var(--n-800);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track {
+  position: relative;
+  flex: none;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--n-200) 0 1px,
+    transparent 1px var(--unit, 44px)
+  );
+}
+
+.bar {
+  position: absolute;
+  top: 5px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--a-500);
+  background: var(--a-100);
+  color: var(--n-900);
+  font-size: var(--t-xs);
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.bar:hover {
+  background: var(--a-200);
+}
+
+.bar[data-done='true'] {
+  border-color: var(--n-300);
+  background: var(--n-100);
+  color: var(--n-500);
+}
+
+.bar[data-overdue='true'] {
+  border-left: 3px solid var(--danger);
+}
+
+.unscheduled {
+  position: absolute;
+  top: 5px;
+  left: var(--sp-1);
+  height: 22px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-2);
+  border: 1px dashed var(--n-300);
+  border-radius: var(--r-sm);
+  font-size: var(--t-xs);
+  color: var(--n-500);
+}
+
+.today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--n-900);
+  pointer-events: none;
+}
+
+.empty {
+  padding: var(--sp-8) var(--sp-4);
+  color: var(--n-500);
+  font-size: var(--t-sm);
+}

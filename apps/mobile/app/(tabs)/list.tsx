@@ -2,11 +2,13 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { GanttChart, type GanttItem } from '../../src/components/GanttChart';
 import { useApp } from '../../src/store';
 import { C, FONT, HIT, SP } from '../../src/theme';
 
 type Status = 'open' | 'done' | 'all';
 type GroupMode = 'flat' | 'tag';
+type ViewMode = 'list' | 'gantt';
 
 const STATUS_LABEL: Record<Status, string> = { open: '未完成', done: '已完成', all: '全部' };
 const NO_TAG = '__none__';
@@ -18,6 +20,8 @@ export default function ListScreen() {
   const [status, setStatus] = useState<Status>('open');
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [mode, setMode] = useState<GroupMode>('flat');
+  // 甘特是列表的另一种排布，不是独立 tab：底部一排已经 5 个，再加一格就多一次跨页跳转
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   const tagName = useMemo(() => {
     const map = new Map(snapshot.tags.map((tag) => [tag.id, tag.name]));
@@ -72,13 +76,46 @@ export default function ListScreen() {
 
   const openCount = filtered.filter((t) => t.completedAt === null).length;
 
+  const ganttItems = useMemo<GanttItem[]>(() => {
+    const listName = new Map(snapshot.lists.map((l) => [l.id, l.name]));
+    return filtered.map((task) => {
+      const start = task.startAt ?? (task.dueDate ? new Date(`${task.dueDate}T00:00:00`).getTime() : null);
+      const end = task.endAt ?? (start === null ? null : start + 86_400_000);
+      return {
+        id: task.id,
+        title: task.title,
+        start,
+        end,
+        done: task.completedAt !== null,
+        groupName: listName.get(task.listId) ?? '收件箱',
+      };
+    });
+  }, [filtered, snapshot.lists]);
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.head}>
-        <Text style={styles.title}>列表</Text>
-        <Text style={styles.sub}>
-          {filtered.length} 条 · 其中 {openCount} 条未完成
-        </Text>
+        <View style={styles.headLeft}>
+          <Text style={styles.title}>列表</Text>
+          <Text style={styles.sub}>
+            {filtered.length} 条 · 其中 {openCount} 条未完成
+          </Text>
+        </View>
+        <View style={styles.segments}>
+          {(['list', 'gantt'] as ViewMode[]).map((key) => (
+            <Pressable
+              key={key}
+              onPress={() => setViewMode(key)}
+              style={[styles.seg, viewMode === key && styles.segOn]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: viewMode === key }}
+            >
+              <Text style={[styles.segText, viewMode === key && styles.onText]}>
+                {key === 'list' ? '列表' : '甘特'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
       <View style={styles.searchWrap}>
@@ -151,6 +188,9 @@ export default function ListScreen() {
         </Pressable>
       </ScrollView>
 
+      {viewMode === 'gantt' ? (
+        <GanttChart items={ganttItems} onOpen={(id) => router.push(`/task/${id}`)} />
+      ) : (
       <FlatList
         data={sections}
         keyExtractor={(section) => section.key}
@@ -216,13 +256,34 @@ export default function ListScreen() {
           </View>
         )}
       />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.n0 },
-  head: { paddingHorizontal: SP[4], paddingTop: SP[4], paddingBottom: SP[2] },
+  head: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: SP[4],
+    paddingTop: SP[4],
+    paddingBottom: SP[2],
+    gap: SP[2],
+  },
+  headLeft: { flex: 1 },
+  segments: { flexDirection: 'row', gap: 1, backgroundColor: C.n200, borderWidth: 1, borderColor: C.n200 },
+  seg: {
+    height: 30,
+    paddingHorizontal: SP[3],
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.n0,
+  },
+  segOn: { backgroundColor: C.n900 },
+  segText: { fontSize: FONT.sm, color: C.n600 },
+  onText: { color: C.n0 },
   title: { fontSize: FONT.xl, color: C.n900, fontWeight: '600' },
   sub: { marginTop: SP[1], fontSize: FONT.base, color: C.n500 },
   searchWrap: { paddingHorizontal: SP[4], paddingTop: SP[2] },
