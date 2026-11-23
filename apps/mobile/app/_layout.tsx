@@ -1,3 +1,6 @@
+// 必须是第一行 import：补 crypto.getRandomValues，且要在任何 ulid() 之前执行
+import '../src/polyfill';
+
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AppProvider } from '../src/store';
