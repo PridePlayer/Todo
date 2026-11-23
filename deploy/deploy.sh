@@ -25,6 +25,17 @@ step "3/5 执行迁移（幂等）"
 pnpm --filter @grid/server db:migrate
 
 step "4/5 构建"
+# 宝塔建站时会在站点根目录写 .user.ini（防跨站攻击的 open_basedir 配置），
+# 并且可能给它加 chattr +i。如果站点根目录被指到了 apps/web/dist，
+# 这个文件就躺在构建产物目录里：vite 清空 outDir 时会对它调 readdir，
+# 报 ENOTDIR，整个构建中断，报错长得完全不像"多了一个文件"。
+# .user.ini 只对 PHP 生效，纯静态站点毫无作用，直接清掉。
+# （根治办法是把站点根目录改回默认，见 docs/09 §7.6。）
+if [ -e apps/web/dist/.user.ini ]; then
+  printf '  · 清理构建目录里的宝塔 .user.ini\n'
+  chattr -i apps/web/dist/.user.ini 2>/dev/null || true
+  rm -f apps/web/dist/.user.ini
+fi
 pnpm --filter @grid/web build
 pnpm --filter @grid/server build
 
