@@ -17,7 +17,22 @@ ExecStart=/usr/bin/node --max-old-space-size=256 dist/index.js
 
 Restart=always
 RestartSec=3
-# 内存上限兜底：单进程超过 512M 说明有泄漏，让它重启
+
+# ── 内存上限兜底 ────────────────────────────────────────────
+# 单进程超过 512M 说明有泄漏，让它重启。
+#
+# 写法按 systemd 版本选，写错会让服务**直接起不来**，而且报错完全看不出
+# 跟内存有关：`systemctl status` 只说 `Failed with result 'resources'`，
+# 日志里也只有一句 `Failed to start GRID API (todo).`
+#
+#   systemd >= 231（Alibaba Cloud Linux 3 / CentOS 8+ / Ubuntu 20.04+）
+#       MemoryMax=512M
+#   systemd = 219（CentOS 7，阿里云老镜像常见）
+#       MemoryLimit=512M
+#
+# 另外 CentOS 7 的 cgroup v1 还需要内核启用了 memory controller 才会生效；
+# 没启用就整行注释掉，功能不受影响，只是少了这层保护。
+# 拿不准就先用 `systemctl --version` 看一眼，再决定留哪一行。
 MemoryMax=512M
 
 # 日志
