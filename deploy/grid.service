@@ -21,18 +21,19 @@ RestartSec=3
 # ── 内存上限兜底 ────────────────────────────────────────────
 # 单进程超过 512M 说明有泄漏，让它重启。
 #
-# 写法按 systemd 版本选，写错会让服务**直接起不来**，而且报错完全看不出
-# 跟内存有关：`systemctl status` 只说 `Failed with result 'resources'`，
-# 日志里也只有一句 `Failed to start GRID API (todo).`
-#
+# 字段名按 systemd 版本选（两者语义相同，只是改名）：
 #   systemd >= 231（Alibaba Cloud Linux 3 / CentOS 8+ / Ubuntu 20.04+）
 #       MemoryMax=512M
 #   systemd = 219（CentOS 7，阿里云老镜像常见）
 #       MemoryLimit=512M
 #
-# 另外 CentOS 7 的 cgroup v1 还需要内核启用了 memory controller 才会生效；
-# 没启用就整行注释掉，功能不受影响，只是少了这层保护。
-# 拿不准就先用 `systemctl --version` 看一眼，再决定留哪一行。
+# ⚠️ 但**不要**把启动失败归咎于这一行。systemd 对"启动准备阶段失败"
+# 一律冠以 `Failed with result 'resources'`，看着像资源限制，实际最常见的
+# 是下面两件事，具体原因永远在 journal 的**上一行**：
+#   grid.service: Failed to load environment files: No such file or directory
+#   grid.service: Failed to run 'start' task: No such file or directory
+# 也就是 EnvironmentFile / WorkingDirectory 指错了，而不是内存。
+# 排查顺序：`journalctl -u grid -n 30 --no-pager` 看那一行，别先动这里。
 MemoryMax=512M
 
 # 日志
