@@ -23,10 +23,5 @@
     "mobile:check": "pnpm --filter @grid/mobile typecheck",
     "mobile:start": "node tools/mobile-start.mjs",
     "postinstall": "pnpm --filter @grid/core build"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   }
 }

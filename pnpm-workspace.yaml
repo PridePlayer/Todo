@@ -9,3 +9,9 @@ minimumReleaseAgeExclude:
   - caniuse-lite
   - multitars
   - node-forge
+
+# pnpm 10 默认不运行依赖的 install 脚本（防供应链攻击）。
+# esbuild 的脚本是下载平台二进制，必须放行，否则 install 直接以 1 退出。
+# 注意：package.json 的 pnpm 字段已不被读取（见 install 时的 WARN），只能写在这里。
+onlyBuiltDependencies:
+  - esbuild
