@@ -2,7 +2,7 @@ import { parseArgs } from 'node:util';
 import { checkPasswordPolicy, hashPassword } from '../auth/password.js';
 import { createDb, runMigrations } from '../db/index.js';
 import { loadEnv } from '../env.js';
-import { countUsers, createUser, findUserByEmail } from '../repo/users.js';
+import { countUsers, createUser, findUserByEmail, listUsers } from '../repo/users.js';
 
 const HELP = `
 创建（唯一）管理员账号。
@@ -54,7 +54,12 @@ try {
 
   const total = await countUsers(db);
   if (!existing && total > 0) {
-    fail(`本系统是单用户模式，已存在 ${total} 个账号。请先删除多余账号再创建`);
+    const all = await listUsers(db);
+    fail(
+      `本系统是单用户模式，已存在 ${total} 个账号。请先删除多余账号再创建\n` +
+        all.map((u) => `    - ${u.email}`).join('\n') +
+        `\n\n  改密码不需要重建账号：pnpm --filter @grid/server reset:password --email <上面的地址>`,
+    );
   }
 
   const passwordHash = await hashPassword(password);

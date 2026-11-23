@@ -74,3 +74,15 @@ export async function countUsers(db: Db): Promise<number> {
   const rows = await db.query<{ c: number | string }>('SELECT COUNT(*) AS c FROM app_user');
   return toNum(rows[0]?.c ?? 0);
 }
+
+/**
+ * 列出所有账号（不含密码哈希）。
+ *
+ * 存在的理由很具体：`reset:password --email` 打错一个字符时的报错是
+ * "账号不存在"，而 CLI 明明连着库、完全知道真实地址是什么。
+ * 让用户为了一条 SELECT 去开 phpMyAdmin 或 mysql 客户端，属于把信息藏起来。
+ */
+export async function listUsers(db: Db): Promise<{ id: string; email: string; createdAt: number }[]> {
+  const rows = await db.query<UserRow>('SELECT id, email, created_at FROM app_user ORDER BY created_at ASC');
+  return rows.map((row) => ({ id: row.id, email: row.email, createdAt: toNum(row.created_at) }));
+}
