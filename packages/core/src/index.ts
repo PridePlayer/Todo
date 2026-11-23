@@ -28,3 +28,15 @@ export {
   type ApiClient,
   type ApiClientOptions,
 } from './api/client';
+
+export {
+  oauthAccountSchema,
+  oauthStatusSchema,
+  oauthVerifyResultSchema,
+  OAUTH_CALLBACK_REASONS,
+  OAUTH_REASON_TEXT,
+  type OAuthAccount,
+  type OAuthStatus,
+  type OAuthVerifyResult,
+  type OAuthCallbackReason,
+} from './models/oauth';

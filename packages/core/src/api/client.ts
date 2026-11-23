@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { oauthStatusSchema, oauthVerifyResultSchema, type OAuthStatus, type OAuthVerifyResult } from '../models/oauth';
 import {
   apiErrorBodySchema,
   loginResponseSchema,
@@ -36,6 +37,14 @@ export interface ApiClient {
   session(): Promise<SessionResponse>;
   login(email: string, password: string): Promise<LoginResponse>;
   logout(): Promise<void>;
+  /** Microsoft 绑定状态。未登录也会返回 configured，便于前端先渲染壳 */
+  oauthStatus(): Promise<OAuthStatus>;
+  /** 断开绑定：只删服务端密文与本地记录，不动微软侧的日历数据 */
+  disconnectMicrosoft(): Promise<void>;
+  /** 真拿 access token 请求一次 Graph /me，证明令牌可用；快过期会先静默刷新 */
+  verifyMicrosoft(): Promise<OAuthVerifyResult>;
+  /** 连接入口。必须用顶层导航（window.location.assign），fetch 跳不过去微软登录页 */
+  microsoftConnectUrl(): string;
   /** 当前持有的 CSRF token（调试用） */
   currentCsrfToken(): string | null;
 }
@@ -122,6 +131,23 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         headers: csrfToken ? { [CSRF_HEADER]: csrfToken } : {},
       });
       csrfToken = null;
+    },
+
+    async oauthStatus() {
+      return request('/oauth/microsoft', { parse: oauthStatusSchema });
+    },
+
+    async disconnectMicrosoft() {
+      // 204 走 request 的 parse(undefined) 分支，z.void() 正好接受
+      await request('/oauth/microsoft/disconnect', { method: 'POST', parse: z.void() });
+    },
+
+    async verifyMicrosoft() {
+      return request('/oauth/microsoft/verify', { parse: oauthVerifyResultSchema });
+    },
+
+    microsoftConnectUrl() {
+      return `${baseUrl}/oauth/microsoft/start`;
     },
 
     currentCsrfToken() {

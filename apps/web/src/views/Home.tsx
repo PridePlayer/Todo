@@ -1,6 +1,7 @@
 import type { SessionUser } from '@grid/core';
 import { useCallback, useEffect, useState } from 'react';
 import styles from './Home.module.css';
+import { OutlookPanel } from './OutlookPanel';
 
 interface HomeProps {
   user: SessionUser;
@@ -174,6 +175,8 @@ export function Home({ user, onLogout }: HomeProps) {
               <p className={styles.muted}>{healthError ?? '正在探测…'}</p>
             )}
           </section>
+
+          <OutlookPanel />
 
           <section className={styles.section} aria-labelledby="next-title">
             <h3 className={styles.h3} id="next-title">

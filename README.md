@@ -2,7 +2,7 @@
 
 待办 + Outlook 日历 + 每日打卡，自托管，只做 Android 与 Web。
 
-当前进度：**M0 地基**（认证、会话、登录锁定、迁移、部署链路）。功能从 M1 开始。
+当前进度：**M0 地基**（认证、会话、登录锁定、迁移、部署链路）+ **Outlook 授权通道**（能连上、能验活、令牌加密落库）。日历同步与待办功能从 M1/M4 开始。
 
 | 目录 | 说明 |
 |---|---|
@@ -10,7 +10,7 @@
 | `packages/core` | 双端共享层：zod 模型、类型化 API 客户端 |
 | `packages/server` | Fastify 5 + 双数据库驱动（SQLite / MySQL） |
 | `deploy/` | 部署脚本、systemd unit、nginx 模板、备份 |
-| `docs/` | PRD、架构、数据模型、UI 规范、里程碑、验收清单、实现决策记录 |
+| `docs/` | PRD、架构、数据模型、UI 规范、里程碑、验收清单、实现决策、Outlook 接入指南 |
 
 ---
 
@@ -84,6 +84,31 @@ ssh -N -L 3307:127.0.0.1:3307 root@你的服务器
 
 ---
 
+## 接入 Outlook（可选）
+
+没配也能正常用；配了才会在首页出现「连接 Outlook」。
+
+**完整步骤见 [`docs/08-Outlook接入指南.md`](docs/08-Outlook接入指南.md)**，最短路径：
+
+1. <https://entra.microsoft.com> → 应用注册 → 新注册
+   - 帐户类型：**任何组织目录中的帐户和个人 Microsoft 帐户**
+   - 重定向 URI 平台 **Web**：`https://todo.stellamp.me/api/oauth/microsoft/callback`
+2. 证书和密码 → 客户端密码 → 复制**「值」**列（不是「密码 ID」）
+3. API 权限 → Microsoft Graph → 委托的权限：`User.Read`、`Calendars.ReadWrite`、`offline_access`
+4. `.env` 填三项（缺一项会拒绝启动）：
+
+```ini
+MS_CLIENT_ID=...
+MS_CLIENT_SECRET=...
+TOKEN_ENC_KEY=$(openssl rand -base64 32)
+```
+
+5. 重启，登录后点「连接 Outlook」，回跳后点「验证令牌」
+
+令牌以 AES-256-GCM 密文存 `oauth_account`，**明文与密文都不下发浏览器**。断开连接只删本地记录，不动你微软侧的日历。
+
+---
+
 ## 部署
 
 完整步骤见 `docs/02-架构与技术方案.md` §11。服务器上只需：
@@ -92,7 +117,20 @@ ssh -N -L 3307:127.0.0.1:3307 root@你的服务器
 cd /www/wwwroot/todo && bash deploy/deploy.sh
 ```
 
-前提（一次性）：Node 24、pnpm、按 `deploy/env.example` 填 `.env`、MySQL 8.0 独立实例（端口 3307）建好 `grid` 库与 `grid_rw` 账号、nginx 站点按 `deploy/nginx.conf.example` 配好并对 `apps/web/dist`。
+前提（一次性）：Node 24、pnpm、按 `deploy/env.example` 填 `.env`、MySQL 8.0 独立实例（端口 3307）建好 `grid` 库与 `grid_rw` 账号、nginx 站点按 `deploy/nginx.conf.example` 配好并对 `apps/web/dist`、域名 `todo.stellamp.me` 的 A 记录与证书就绪。
+
+---
+
+## Outlook 排障
+
+| 现象 | 原因与处理 |
+|---|---|
+| 首页 Outlook 区块显示「未配置」 | `.env` 三项没配齐，或没重启。`curl -s 你的域名/api/oauth/microsoft` 应返回 `"configured":true` |
+| 启动报「Microsoft OAuth 配置不完整」 | 只填了部分项。要么三项齐全，要么全留空 |
+| 回调跳到 `?ms=error&reason=state_invalid` | state 过期/已用过/伪造。重新点「连接 Outlook」 |
+| 回调跳到 `?ms=error&reason=code_rejected` | 授权码被拒。看 `journalctl -u grid` 里 `oauth code exchange failed` 的 AADSTS 码，对照 docs/08 §5 |
+| 点「验证令牌」提示授权失效 | 微软侧撤回了授权。点「重新授权」 |
+| 想撤销授权 | 断开连接只删本地；彻底撤销去 <https://account.live.com/consent/Manage> |
 
 ---
 

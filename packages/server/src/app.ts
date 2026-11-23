@@ -6,6 +6,7 @@ import type { AppEnv } from './env.js';
 import { HttpError, sendError } from './http/errors.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
+import { oauthRoutes } from './routes/oauth.js';
 import { VERSION } from './version.js';
 
 export interface AppDeps {
@@ -95,6 +96,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   await app.register(healthRoutes, { prefix: '/api', db, startedAt: deps.startedAt, version: VERSION });
   await app.register(authRoutes, { prefix: '/api', db, env });
+  await app.register(oauthRoutes, { prefix: '/api', db, env });
 
   return app;
 }
