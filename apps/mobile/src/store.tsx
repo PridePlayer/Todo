@@ -90,6 +90,8 @@ interface AppState {
   createTask: (input: NewTaskInput) => Promise<string>;
   patchTask: (id: string, patch: Record<string, unknown>) => Promise<void>;
   patchHabit: (id: string, patch: Partial<Habit>) => Promise<void>;
+  /** 跳过重复任务的某一次（写一条 deleted 例外，该次不再出现） */
+  skipOccurrence: (seriesId: string, originalStart: number) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   ensureTag: (name: string) => Promise<Tag>;
   checkHabit: (habitId: string, logDate: string, delta: number) => Promise<void>;
@@ -494,6 +496,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [refresh, snapshot.habits]);
 
   /**
+   * 跳过重复任务的某一次。
+   *
+   * 语义是"这一次不要了"，不是"把母体删掉"：写一条 kind=deleted 的
+   * recur_exception，展开时会被排除。与 Web 端 repo.skipOccurrence 同一套数据。
+   */
+  const skipOccurrence = useCallback(
+    async (seriesId: string, originalStart: number) => {
+      const already = snapshot.exceptions.some(
+        (e) => e.seriesId === seriesId && e.originalStart === originalStart && e.kind === 'deleted',
+      );
+      if (already) return;
+      const device = await ensureDeviceId();
+      const now = Date.now();
+      const id = ulid();
+      const exc: RecurException = {
+        id,
+        seriesId,
+        originalStart,
+        kind: 'deleted',
+        overrideStart: null,
+        overrideEnd: null,
+        overrideTitle: null,
+        payload: null,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        rev: 1,
+      };
+      await putRow('recur_exception', id, 1, exc as unknown as Record<string, unknown>);
+      await queueOp({
+        opId: ulid(),
+        table: 'recur_exception',
+        action: 'create',
+        id,
+        baseRev: 0,
+        fields: exc as unknown as Record<string, unknown>,
+        hlc: nextHlc(device),
+      });
+      setSnapshot((prev) => ({ ...prev, exceptions: [...prev.exceptions, exc] }));
+      setPending((n) => n + 1);
+      void refresh();
+    },
+    [refresh, snapshot.exceptions],
+  );
+
+  /**
    * 找标签或建标签。
    *
    * 先按名字在本地找（同名不同 id 会变成两个标签，界面上看就是重复项），
@@ -626,6 +674,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       createTask,
       patchTask,
       patchHabit,
+      skipOccurrence,
       deleteTask,
       ensureTag,
       checkHabit,
@@ -648,6 +697,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       createTask,
       patchTask,
       patchHabit,
+      skipOccurrence,
       deleteTask,
       ensureTag,
       checkHabit,

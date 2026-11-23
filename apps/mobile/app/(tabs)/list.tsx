@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { describeRrule, formatDateLabel } from '@grid/core';
+import { describeRrule, expandSeries, formatDateLabel, type Task } from '@grid/core';
 import { GanttChart, type GanttItem } from '../../src/components/GanttChart';
 import { useApp } from '../../src/store';
 import { C, FONT, HIT, SP } from '../../src/theme';
@@ -15,7 +15,7 @@ const STATUS_LABEL: Record<Status, string> = { open: '未完成', done: '已完�
 const NO_TAG = '__none__';
 
 export default function ListScreen() {
-  const { snapshot, toggleTask } = useApp();
+  const { snapshot, toggleTask, skipOccurrence } = useApp();
   const router = useRouter();
   const [query, setQuery] = useState('');
   const todayKey = (() => {
@@ -43,6 +43,11 @@ export default function ListScreen() {
       if (status === 'done' && task.completedAt === null) return false;
       if (tagFilter === NO_TAG && task.tagIds.length > 0) return false;
       if (tagFilter !== null && tagFilter !== NO_TAG && !task.tagIds.includes(tagFilter)) return false;
+      if (dateFilter === 'overdue') {
+        if (task.completedAt !== null) return false;
+        if (task.dueDate === null) return false;
+        return task.dueDate < todayKey;
+      }
       if (dateFilter !== null) {
         const due = task.dueDate;
         let startKey: string | null = null;
@@ -99,6 +104,59 @@ export default function ListScreen() {
   }, [filtered, mode, tagName]);
 
   const openCount = filtered.filter((t) => t.completedAt === null).length;
+
+  /**
+   * 已经过期的重复实例。
+   *
+   * 重复任务里"上周一那次"已经过了但还挂着 —— 一个个手动跳很蠢，
+   * 这里把它们聚出来，一键跳过，母体自动前进到下一个重复日。
+   */
+  const overdueRepeats = useMemo(() => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const keyOf = (ts: number) => {
+      const d = new Date(ts);
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    };
+    const todayStart = new Date(`${todayKey}T00:00:00`).getTime();
+    const skipped = new Set(
+      snapshot.exceptions.filter((e) => e.kind === 'deleted').map((e) => `${e.seriesId}@${e.originalStart}`),
+    );
+    const out: { key: string; task: Task; originalStart: number; dateText: string }[] = [];
+    for (const task of snapshot.tasks) {
+      if (!task.rrule || task.completedAt !== null || task.deletedAt !== null) continue;
+      const anchor = task.startAt ?? (task.dueDate ? new Date(`${task.dueDate}T00:00:00`).getTime() : null);
+      if (anchor === null) continue;
+      const occurrences = expandSeries(
+        {
+          id: task.id,
+          title: task.title,
+          startAt: anchor,
+          endAt: task.endAt,
+          allDay: task.allDay,
+          rrule: task.rrule,
+          exceptions: snapshot.exceptions.filter((e) => e.seriesId === task.id),
+          kind: 'task',
+          origin: null,
+        },
+        0,
+        todayStart,
+        60,
+      );
+      for (const occ of occurrences) {
+        if (occ.start >= todayStart) continue;
+        const key = `${task.id}@${occ.originalStart}`;
+        if (skipped.has(key)) continue;
+        out.push({ key, task, originalStart: occ.originalStart, dateText: formatDateLabel(keyOf(occ.start)) });
+      }
+    }
+    return out;
+  }, [snapshot.tasks, snapshot.exceptions, todayKey]);
+
+  async function skipAllOverdue() {
+    for (const item of overdueRepeats) {
+      await skipOccurrence(item.task.id, item.originalStart);
+    }
+  }
 
   const ganttItems = useMemo<GanttItem[]>(() => {
     const listName = new Map(snapshot.lists.map((l) => [l.id, l.name]));
@@ -182,6 +240,7 @@ export default function ListScreen() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dateScroll} contentContainerStyle={styles.dateRow}>
         {[
           { label: '全部日期', value: null as string | null },
+          { label: '已过期', value: 'overdue' },
           { label: '今日', value: todayKey },
           {
             label: '明日',
@@ -236,6 +295,22 @@ export default function ListScreen() {
           <Text style={[styles.chipText, tagFilter === NO_TAG && styles.chipTextOn]}>未分类</Text>
         </Pressable>
       </ScrollView>
+
+      {viewMode === 'list' && overdueRepeats.length > 0 ? (
+        <View style={styles.overdueBar}>
+          <Text style={styles.overdueText}>
+            {overdueRepeats.length} 个过期的重复实例，最久 {overdueRepeats[0]?.dateText}
+          </Text>
+          <Pressable
+            onPress={() => void skipAllOverdue()}
+            style={styles.overdueBtn}
+            accessibilityRole="button"
+            accessibilityLabel="全部跳过过期重复实例"
+          >
+            <Text style={styles.overdueBtnText}>全部跳过</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {viewMode === 'gantt' ? (
         <GanttChart items={ganttItems} onOpen={(id) => router.push(`/task/${id}`)} />
@@ -373,7 +448,30 @@ const styles = StyleSheet.create({
   chipText: { fontSize: FONT.sm, color: C.n600 },
   chipTextOn: { color: C.n0 },
   list: { paddingHorizontal: SP[4], paddingBottom: SP[8] },
-  emptyWrap: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SP[4] },
+  emptyWrap: { paddingTop: SP[6], paddingHorizontal: SP[4] },
+  overdueBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SP[2],
+    marginHorizontal: SP[4],
+    marginBottom: SP[2],
+    paddingHorizontal: SP[3],
+    paddingVertical: SP[2],
+    borderLeftWidth: 2,
+    borderLeftColor: C.warn,
+    backgroundColor: C.n50,
+  },
+  overdueText: { flex: 1, fontSize: FONT.sm, color: C.n700 },
+  overdueBtn: {
+    height: 32,
+    paddingHorizontal: SP[3],
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: C.warn,
+    borderRadius: 2,
+  },
+  overdueBtnText: { fontSize: FONT.sm, color: C.warn },
   emptyTitle: { fontSize: FONT.md, color: C.n700 },
   emptyHint: { marginTop: SP[1], fontSize: FONT.base, color: C.n500 },
   sectionHead: {

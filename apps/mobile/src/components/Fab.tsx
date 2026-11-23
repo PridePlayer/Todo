@@ -1,5 +1,6 @@
 import { buildRrule, weekdayOf, WEEKDAYS, type RrulePreset, type Weekday } from '@grid/core';
 import { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -35,6 +36,7 @@ const WEEKDAY_CN: Record<Weekday, string> = { MO: '一', TU: '二', WE: '三', T
  */
 export function Fab() {
   const { snapshot, createTask, ensureTag } = useApp();
+  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<Kind>('task');
   const [title, setTitle] = useState('');
@@ -106,7 +108,7 @@ export function Fab() {
       {!open ? (
         <Pressable
           onPress={() => setOpen(true)}
-          style={styles.fab}
+          style={[styles.fab, { bottom: 56 + insets.bottom + SP[4] }]}
           accessibilityRole="button"
           accessibilityLabel="快速新建"
         >
