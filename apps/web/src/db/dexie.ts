@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Tag, Task, TaskList } from '@grid/core';
+import type { RecurException, SyncTable, Tag, Task, TaskList } from '@grid/core';
 
 /**
  * 本地操作队列的一条记录。
@@ -9,7 +9,7 @@ import type { Tag, Task, TaskList } from '@grid/core';
  */
 export interface OutboxOp {
   opId: string;
-  table: 'task' | 'tag' | 'list';
+  table: SyncTable;
   action: 'create' | 'update' | 'delete';
   id: string;
   baseRev: number;
@@ -62,6 +62,7 @@ export class GridDB extends Dexie {
   outbox!: Table<OutboxOp, string>;
   meta!: Table<MetaRow, string>;
   conflicts!: Table<ConflictRow, string>;
+  exceptions!: Table<RecurException, string>;
 
   constructor() {
     super('grid');
@@ -79,12 +80,23 @@ export class GridDB extends Dexie {
       meta: 'key',
       conflicts: 'id, taskId, createdAt',
     });
+    // v3：重复例外。seriesId + originalStart 是查表主路径（按系列取全部例外）
+    this.version(3).stores({
+      tasks: 'id, parentId, quadrant, completedAt, dueDate, path, sortOrder, deletedAt, listId',
+      tags: 'id, &name',
+      lists: 'id, sortOrder',
+      outbox: 'opId, status, createdAt, id',
+      meta: 'key',
+      conflicts: 'id, taskId, createdAt',
+      exceptions: 'id, seriesId, originalStart, kind, deletedAt',
+    });
     this.tasks = this.table('tasks');
     this.tags = this.table('tags');
     this.lists = this.table('lists');
     this.outbox = this.table('outbox');
     this.meta = this.table('meta');
     this.conflicts = this.table('conflicts');
+    this.exceptions = this.table('exceptions');
   }
 }
 

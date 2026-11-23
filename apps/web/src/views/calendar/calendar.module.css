@@ -1,0 +1,561 @@
+/* 日历：日/周/月/列表四视图共用一套排版骨架 */
+
+.view {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-4) var(--sp-6) var(--sp-4);
+}
+
+.head {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.title {
+  margin-top: var(--sp-1);
+  font-size: var(--t-xl);
+  line-height: var(--lh-xl);
+  letter-spacing: -0.02em;
+  color: var(--n-1000);
+  font-variant-numeric: tabular-nums;
+}
+
+.headTools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
+.seg {
+  height: 28px;
+  padding: 0 var(--sp-3);
+  font-size: var(--t-sm);
+  color: var(--n-600);
+  background: var(--n-0);
+  cursor: pointer;
+  border-right: 1px solid var(--n-200);
+}
+
+.seg:last-child {
+  border-right: none;
+}
+
+.seg[data-on='true'] {
+  background: var(--a-500);
+  color: var(--n-0);
+}
+
+.navBtn {
+  height: 28px;
+  min-width: 28px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  color: var(--n-700);
+  font-size: var(--t-sm);
+  cursor: pointer;
+}
+
+.navBtn:hover {
+  background: var(--n-100);
+}
+
+/* ── 新建条 ───────────────────────────────────────────── */
+.newBar {
+  margin-top: var(--sp-3);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--n-200);
+  border-radius: var(--r-sm);
+  background: var(--n-50, var(--n-100));
+}
+
+.newInput {
+  flex: 1 1 240px;
+  min-width: 160px;
+  height: 30px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: var(--t-sm);
+  color: var(--n-900);
+  background: var(--n-0);
+}
+
+.newInput::placeholder {
+  color: var(--n-400);
+}
+
+.select {
+  height: 30px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  color: var(--n-800);
+  background: var(--n-0);
+  cursor: pointer;
+}
+
+.days {
+  display: flex;
+  gap: 2px;
+}
+
+.day {
+  width: 26px;
+  height: 30px;
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  font-size: var(--t-xs);
+  color: var(--n-600);
+  background: var(--n-0);
+  cursor: pointer;
+}
+
+.day[data-on='true'] {
+  background: var(--a-500);
+  border-color: var(--a-500);
+  color: var(--n-0);
+}
+
+.addBtn {
+  height: 30px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--a-500);
+  color: var(--n-0);
+  font-size: var(--t-sm);
+  cursor: pointer;
+}
+
+.addBtn:disabled {
+  background: var(--n-300);
+  cursor: not-allowed;
+}
+
+.hint {
+  font-size: var(--t-xs);
+  color: var(--n-400);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* ── 时间轴 ───────────────────────────────────────────── */
+.gridWrap {
+  margin-top: var(--sp-3);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--n-200);
+  border-radius: var(--r-sm);
+  background: var(--n-0);
+}
+
+/* 表头不跟着滚：翻到下午时还能看见"这是周三" */
+.headRow {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  background: var(--n-0);
+  border-bottom: 1px solid var(--n-200);
+}
+
+.hoursSpacer {
+  flex: none;
+  width: 52px;
+  border-right: 1px solid var(--n-200);
+}
+
+.hours {
+  flex: none;
+  width: 52px;
+  border-right: 1px solid var(--n-200);
+  background: var(--n-0);
+}
+
+.hoursInner {
+  position: relative;
+}
+
+.hourLabel {
+  position: absolute;
+  right: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--n-400);
+  transform: translateY(-50%);
+  font-variant-numeric: tabular-nums;
+}
+
+.bodyRow {
+  display: flex;
+  align-items: flex-start;
+}
+
+.allDayRow {
+  display: flex;
+  border-bottom: 1px solid var(--n-200);
+  background: var(--n-0);
+}
+
+.allDayLabel {
+  flex: none;
+  width: 52px;
+  padding: 3px 6px;
+  border-right: 1px solid var(--n-200);
+  font-size: var(--t-xs);
+  color: var(--n-400);
+}
+
+.allDayCell {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 3px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-right: 1px solid var(--n-100);
+}
+
+.allDayChip {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  background: var(--a-100);
+  color: var(--a-700);
+  font-size: var(--t-xs);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dayCols {
+  display: flex;
+  min-height: 0;
+}
+
+.dayCol {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  border-right: 1px solid var(--n-100);
+}
+
+.dayCol:last-child {
+  border-right: none;
+}
+
+.dayColHead {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 5px 6px;
+  background: var(--n-0);
+  border-right: 1px solid var(--n-100);
+  cursor: pointer;
+}
+
+.dayColHead[data-today='true'] .dayNo {
+  background: var(--a-500);
+  color: var(--n-0);
+}
+
+.dayName {
+  font-size: var(--t-xs);
+  color: var(--n-500);
+}
+
+.dayNo {
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  color: var(--n-900);
+  padding: 0 3px;
+  border-radius: var(--r-sm);
+}
+
+.canvas {
+  position: relative;
+}
+
+.hourLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--n-100);
+}
+
+.halfLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed var(--n-100);
+}
+
+.nowLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px solid var(--danger);
+  z-index: 4;
+  pointer-events: none;
+}
+
+.nowDot {
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+/* ── 月视图 ───────────────────────────────────────────── */
+.monthWrap {
+  margin-top: var(--sp-3);
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--n-200);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
+.weekHead {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 1px solid var(--n-200);
+}
+
+.weekHeadCell {
+  padding: 6px;
+  font-size: var(--t-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--n-500);
+  text-align: center;
+}
+
+.monthBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+}
+
+.mCell {
+  border-right: 1px solid var(--n-100);
+  border-bottom: 1px solid var(--n-100);
+  padding: 4px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.mCell:hover {
+  background: var(--n-100);
+}
+
+.mCell[data-out='true'] {
+  background: var(--n-0);
+  opacity: 0.55;
+}
+
+.mDate {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--n-600);
+}
+
+.mCell[data-today='true'] .mDate {
+  background: var(--a-500);
+  color: var(--n-0);
+  border-radius: var(--r-sm);
+  padding: 0 3px;
+  align-self: flex-start;
+}
+
+.bar {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: var(--a-100);
+  color: var(--a-700);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.bar:hover {
+  background: var(--a-200);
+}
+
+.more {
+  font-size: 10px;
+  color: var(--n-500);
+}
+
+/* ── 列表视图 ─────────────────────────────────────────── */
+.agenda {
+  margin-top: var(--sp-3);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--n-200);
+}
+
+.aGroup {
+  display: flex;
+  gap: var(--sp-4);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--n-100);
+}
+
+.aDate {
+  flex: none;
+  width: 96px;
+  font-size: var(--t-sm);
+  color: var(--n-500);
+  font-variant-numeric: tabular-nums;
+}
+
+.aRows {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.aRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 5px 6px;
+  border-radius: var(--r-sm);
+  text-align: left;
+  cursor: pointer;
+  background: none;
+}
+
+.aRow:hover {
+  background: var(--n-100);
+}
+
+.aTime {
+  flex: none;
+  width: 96px;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  color: var(--n-500);
+  font-variant-numeric: tabular-nums;
+}
+
+.aTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--t-body);
+  color: var(--n-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aTag {
+  flex: none;
+  font-size: 10px;
+  color: var(--a-600);
+  border: 1px solid var(--a-200);
+  border-radius: var(--r-pill);
+  padding: 0 6px;
+}
+
+.aDel {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--n-400);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.aRow:hover .aDel {
+  opacity: 1;
+}
+
+.aDel:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.empty {
+  padding: var(--sp-8) var(--sp-4);
+  text-align: center;
+  color: var(--n-500);
+  font-size: var(--t-sm);
+}
+
+@media (max-width: 900px) {
+  .view {
+    padding: var(--sp-3) var(--sp-3) var(--sp-3);
+  }
+
+  .head {
+    gap: var(--sp-2);
+  }
+
+  .hint {
+    display: none;
+  }
+
+  .hours,
+  .allDayLabel {
+    width: 40px;
+  }
+
+  .aDate {
+    width: 64px;
+  }
+
+  .aTime {
+    width: 72px;
+  }
+}

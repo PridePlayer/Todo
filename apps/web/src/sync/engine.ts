@@ -1,6 +1,7 @@
 import {
   ApiError,
   type Quadrant,
+  type RecurException,
   type SyncChange,
   type SyncConflict,
   type SyncOp,
@@ -349,6 +350,19 @@ async function applyPayload(
     return;
   }
 
+  if (table === 'recur_exception') {
+    // 例外不物理删除：服务端的唯一键是 (series_id, original_start)，
+    // 留着墓碑，同一次被"复活"时才能复用同一行而不是撞唯一索引
+    const row = await db.exceptions.get(id);
+    if (deletedAt !== null) {
+      if (row) await db.exceptions.put({ ...row, deletedAt, rev });
+      return;
+    }
+    if (!payload) return;
+    await db.exceptions.put(toException(id, rev, payload, deletedAt));
+    return;
+  }
+
   if (deletedAt !== null) {
     await db.lists.delete(id);
     return;
@@ -409,9 +423,7 @@ function toTask(id: string, rev: number, payload: Record<string, unknown>): Task
 
 function str(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
-}
-
-function numOrNull(value: unknown): number | null {
+}function numOrNull(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
@@ -422,13 +434,35 @@ function clampQuadrant(value: unknown): Quadrant {
   return n === 2 || n === 3 || n === 4 ? n : 1;
 }
 
+/** 线上 payload → 例外行。kind 只认两个值，脏数据按 override 处理（宁可多显示一次也不静默丢） */
+function toException(id: string, rev: number, payload: Record<string, unknown>, deletedAt: number | null): RecurException {
+  const now = Date.now();
+  return {
+    id,
+    seriesId: str(payload.seriesId) ?? '',
+    originalStart: numOrNull(payload.originalStart) ?? 0,
+    kind: payload.kind === 'deleted' ? 'deleted' : 'override',
+    overrideStart: numOrNull(payload.overrideStart),
+    overrideEnd: numOrNull(payload.overrideEnd),
+    overrideTitle: str(payload.overrideTitle),
+    payload: typeof payload.payload === 'object' && payload.payload !== null
+      ? (payload.payload as Record<string, unknown>)
+      : null,
+    createdAt: numOrNull(payload.createdAt) ?? now,
+    updatedAt: numOrNull(payload.updatedAt) ?? now,
+    deletedAt,
+    rev: rev > 0 ? rev : 1,
+  };
+}
+
 // ── 人工操作 ────────────────────────────────────────────────
 
 async function clearLocalData(): Promise<void> {
-  await db.transaction('rw', db.tasks, db.tags, db.lists, async () => {
+  await db.transaction('rw', db.tasks, db.tags, db.lists, db.exceptions, async () => {
     await db.tasks.clear();
     await db.tags.clear();
     await db.lists.clear();
+    await db.exceptions.clear();
   });
 }
 

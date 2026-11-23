@@ -58,10 +58,26 @@ const LIST_FIELDS: Record<string, FieldSpec> = {
   deletedAt: { col: 'deleted_at', kind: 'raw' },
 };
 
+const EXCEPTION_FIELDS: Record<string, FieldSpec> = {
+  id: { col: 'id', kind: 'raw' },
+  seriesId: { col: 'series_id', kind: 'raw' },
+  originalStart: { col: 'original_start', kind: 'raw' },
+  kind: { col: 'kind', kind: 'raw' },
+  overrideStart: { col: 'override_start', kind: 'raw' },
+  overrideEnd: { col: 'override_end', kind: 'raw' },
+  overrideTitle: { col: 'override_title', kind: 'raw' },
+  payload: { col: 'override_payload', kind: 'json' },
+  createdAt: { col: 'created_at', kind: 'raw' },
+  updatedAt: { col: 'updated_at', kind: 'raw' },
+  deletedAt: { col: 'deleted_at', kind: 'raw' },
+  rev: { col: 'rev', kind: 'raw' },
+};
+
 export const FIELD_MAPS = {
   task: TASK_FIELDS,
   tag: TAG_FIELDS,
   list: LIST_FIELDS,
+  recur_exception: EXCEPTION_FIELDS,
 } as const;
 
 export type SyncTableName = keyof typeof FIELD_MAPS;
@@ -76,13 +92,14 @@ function encode(kind: Kind, value: unknown): unknown {
 function decode(kind: Kind, value: unknown): unknown {
   if (kind === 'bool') return Number(value) === 1;
   if (kind === 'json') {
-    if (value === null || value === undefined || value === '') return [];
+    if (value === null || value === undefined || value === '') return null;
     try {
       const parsed = JSON.parse(String(value));
-      return Array.isArray(parsed) ? parsed : [];
+      // 数组（tag_ids）与对象（override_payload）都原样返回；
+      // 只有解不出来时才退化成 null，别让一处脏 JSON 把整次 pull 弄挂
+      return typeof parsed === 'object' && parsed !== null ? parsed : null;
     } catch {
-      // 库里存了半截 JSON 时不要让整个 pull 失败，退化成空数组
-      return [];
+      return null;
     }
   }
   // BIGINT 在 mysql2 下可能回传字符串，数字字段统一转 number

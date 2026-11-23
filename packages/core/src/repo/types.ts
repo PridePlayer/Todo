@@ -21,6 +21,8 @@ export interface TaskPatch {
   sortOrder?: number;
   /** 改父级（拖动到别的任务下）。会连带重算子孙的 path/depth */
   parentId?: string | null;
+  /** 重复规则；null = 取消重复。写字符串前必须先过 parseRrule 校验 */
+  rrule?: string | null;
 }
 
 export interface TaskStore {

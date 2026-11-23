@@ -18,7 +18,13 @@ export const hlcSchema = z.object({
 
 export type Hlc = z.infer<typeof hlcSchema>;
 
-export const SYNC_TABLES = ['task', 'tag', 'list'] as const;
+/**
+ * 参与同步的表。
+ *
+ * 顺序就是 pull 时逐表取数的顺序，也是"表名 = 服务端物理表名"的约定——
+ * 别在这里加别名，`SELECT * FROM ${table}` 是直接拼的（表名只来自这个白名单）。
+ */
+export const SYNC_TABLES = ['task', 'tag', 'list', 'recur_exception'] as const;
 export type SyncTable = (typeof SYNC_TABLES)[number];
 
 export const SYNC_ACTIONS = ['create', 'update', 'delete'] as const;

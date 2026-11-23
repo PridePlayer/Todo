@@ -1,0 +1,109 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: color-mix(in srgb, var(--n-1000) 32%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+}
+
+.panel {
+  width: min(440px, 100%);
+  background: var(--n-0);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-md);
+  padding: var(--sp-5);
+}
+
+.title {
+  margin-top: var(--sp-1);
+  font-size: var(--t-lg);
+  line-height: var(--lh-lg);
+  letter-spacing: -0.01em;
+  color: var(--n-1000);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.lead {
+  margin-top: var(--sp-2);
+  font-size: var(--t-sm);
+  line-height: var(--lh-sm);
+  color: var(--n-500);
+}
+
+.options {
+  margin-top: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--n-200);
+  border: 1px solid var(--n-200);
+}
+
+.option {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  padding: var(--sp-3);
+  background: var(--n-0);
+  text-align: left;
+  cursor: pointer;
+}
+
+.option:hover {
+  background: var(--a-100);
+}
+
+.no {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--n-500);
+}
+
+.option:hover .no {
+  border-color: var(--a-500);
+  color: var(--a-600);
+}
+
+.label {
+  display: block;
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  color: var(--n-900);
+}
+
+.hint {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--t-xs);
+  line-height: var(--lh-xs);
+  color: var(--n-500);
+}
+
+.cancel {
+  margin-top: var(--sp-4);
+  height: 30px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  color: var(--n-600);
+  cursor: pointer;
+}
+
+.cancel:hover {
+  background: var(--n-100);
+}

@@ -20,7 +20,7 @@ interface Deps {
   env: AppEnv;
 }
 
-const TABLES: SyncTableName[] = ['task', 'tag', 'list'];
+const TABLES: SyncTableName[] = ['task', 'tag', 'list', 'recur_exception'];
 
 const DEFAULTS: Record<SyncTableName, Record<string, unknown>> = {
   task: {
@@ -46,12 +46,20 @@ const DEFAULTS: Record<SyncTableName, Record<string, unknown>> = {
   },
   tag: { color_key: 0 },
   list: { sort_order: 0 },
+  recur_exception: {
+    kind: 'override',
+    override_start: null,
+    override_end: null,
+    override_title: null,
+    override_payload: null,
+  },
 };
 
 const REQUIRED: Record<SyncTableName, string | null> = {
   task: 'title',
   tag: 'name',
   list: 'name',
+  recur_exception: 'seriesId',
 };
 
 /** 表名只来自白名单，绝不能从请求里拼 */

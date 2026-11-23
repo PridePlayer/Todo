@@ -104,6 +104,17 @@ async function openPage() {
   const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
   const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
 
+  const errors = [];
+  cdp.on((msg) => {
+    if (msg.method === 'Runtime.exceptionThrown') {
+      const detail = msg.params?.exceptionDetails;
+      errors.push(detail?.exception?.description ?? detail?.text ?? 'unknown');
+    }
+    if (msg.method === 'Runtime.consoleAPICalled' && msg.params?.type === 'error') {
+      errors.push(msg.params.args?.map((a) => a.value ?? a.description ?? '').join(' ') ?? '');
+    }
+  });
+
   const send = (method, params) => cdp.send(method, params, sessionId);
   await send('Page.enable');
   await send('Runtime.enable');
@@ -134,7 +145,7 @@ async function openPage() {
     }
   }
 
-  return { cdp, send, evaluate, waitUntil, targetId };
+  return { cdp, send, evaluate, waitUntil, targetId, errors };
 }
 
 // ── 断言 ────────────────────────────────────────────────────
@@ -318,6 +329,141 @@ try {
   `);
   check('全量重建后任务从服务端回来了', rebuilt.includes('离线任务 Alpha'));
 
+  // 10) 日历：建一条"每周一三五 09:00"，看四周展开
+  await page.evaluate(`
+    document.querySelector('nav[aria-label="主导航"] button[aria-label="日历"]')?.click();
+    return true;
+  `);
+  await page.waitUntil("[...document.querySelectorAll('input')].some(i => i.placeholder?.includes('新建安排'))", 8000, '日历新建条');
+
+  const created = await page.evaluate(`
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    const input = [...document.querySelectorAll('input')].find(i => i.placeholder?.includes('新建安排'));
+    setter.call(input, '验收周会');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const time = document.querySelector('input[type="time"]');
+    setter.call(time, '09:00');
+    time.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const select = [...document.querySelectorAll('select')].find(s => [...s.options].some(o => o.value === 'weekly'));
+    const sSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+    sSetter.call(select, 'weekly');
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 200));
+
+    // 只留一/三/五
+    const wanted = ['周一', '周三', '周五'];
+    for (const btn of document.querySelectorAll('button[title^="周"]')) {
+      const on = btn.getAttribute('aria-pressed') === 'true';
+      const want = wanted.includes(btn.getAttribute('title'));
+      if (on !== want) btn.click();
+    }
+    await new Promise(r => setTimeout(r, 100));
+    [...document.querySelectorAll('button')].find(b => b.textContent.trim() === '添加')?.click();
+    return 'ok';
+  `);
+  check('日历能新建每周重复的事件', created === 'ok');
+
+  await page.waitUntil("document.body.innerText.includes('验收周会')", 8000, '周视图出现实例');
+  const weekCount = await page.evaluate(`
+    await new Promise(r => setTimeout(r, 300));
+    return (document.body.innerText.match(/验收周会/g) || []).length;
+  `);
+  check('周视图里本周有 3 次（一/三/五）', weekCount >= 2 && weekCount <= 4, `${weekCount} 次`);
+
+  const monthCount = await page.evaluate(`
+    [...document.querySelectorAll('button')].find(b => b.textContent.trim() === '月')?.click();
+    await new Promise(r => setTimeout(r, 500));
+    return (document.body.innerText.match(/验收周会/g) || []).length;
+  `);
+  // 事件从"今天"开始，而月网格从本月初起算，所以网格内只会出现从今天到网格末尾的那几周
+  check('月视图按网格展开实例（不再只是本周那几次）', monthCount >= 6, `${monthCount} 次`);
+
+  // 11) 改其中一次的时间 → 选"只这一次"
+  const edited = await page.evaluate(`
+    [...document.querySelectorAll('button')].find(b => b.textContent.trim() === '周')?.click();
+    await new Promise(r => setTimeout(r, 400));
+    const block = [...document.querySelectorAll('[role="button"]')].find(el => el.textContent?.includes('验收周会'));
+    if (!block) return 'no-block';
+    block.click();
+    await new Promise(r => setTimeout(r, 300));
+    // 必须限定在编辑面板里：新建条自己也有一个 time 输入框，
+    // 用 document 全局取第一个会改到它，保存时"没有任何改动"于是静默关闭
+    const startInput = document.querySelector('form[role="dialog"] input[type="time"]');
+    if (!startInput) return 'no-editor';
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(startInput, '14:00');
+    startInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 100));
+    [...document.querySelectorAll('button')].find(b => b.textContent.trim() === '保存')?.click();
+    await new Promise(r => setTimeout(r, 300));
+    const scopes = [...document.querySelectorAll('button')].map(b => b.textContent.trim());
+    const only = [...document.querySelectorAll('button')].find(b => b.textContent.includes('只修改这一次'));
+    if (!only) return 'no-scope:' + scopes.join('|');
+    only.click();
+    await new Promise(r => setTimeout(r, 500));
+    return document.body.innerText;
+  `);
+  check('改单次时弹出三选项', typeof edited === 'string' && edited.includes('验收周会'), typeof edited === 'string' && edited.startsWith('no-') ? edited : '');
+  check('选「只这一次」后该次挪到 14:00', typeof edited === 'string' && edited.includes('14:00'));
+  if (page.errors.length > 0) {
+    console.log('  页面错误：');
+    for (const err of page.errors.slice(0, 5)) console.log(`    ! ${String(err).split('\n')[0]}`);
+  }
+
+  // 12) 改标题选「这一次及以后」→ 本系列的周一周三保持旧标题、周五起用新标题
+  const split = await page.evaluate(`
+    const blocks = [...document.querySelectorAll('[role="button"]')].filter(el => el.textContent?.includes('验收周会'));
+    if (blocks.length < 2) return 'no-blocks:' + blocks.length;
+    // 取本周最后一次（周五）：它之前的那两次必须保持旧标题
+    const last = blocks[blocks.length - 1];
+    last.click();
+    await new Promise(r => setTimeout(r, 300));
+    const titleInput = document.querySelector('form[role="dialog"] input:not([type])');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(titleInput, '验收周会B');
+    titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 100));
+    [...document.querySelectorAll('button')].find(b => b.textContent.trim() === '保存')?.click();
+    await new Promise(r => setTimeout(r, 300));
+    const pick = [...document.querySelectorAll('button')].find(b => b.textContent.includes('这一次及以后'));
+    if (!pick) return 'no-option';
+    pick.click();
+    await new Promise(r => setTimeout(r, 800));
+    const text = document.body.innerText;
+    return {
+      a: (text.match(/验收周会(?!B)/g) || []).length,
+      b: (text.match(/验收周会B/g) || []).length,
+      list: [...document.querySelectorAll('[role="button"]')]
+        .map(el => el.textContent).filter(t => t && t.includes('验收周会')),
+    };
+  `);
+  check(
+    '「这一次及以后」把系列拆开：之前的保持旧标题，之后用新标题',
+    typeof split === 'object' && split !== null && split.a >= 1 && split.b >= 1,
+    typeof split === 'object' && split !== null
+      ? `旧 ${split.a} 次 / 新 ${split.b} 次 | ${(split.list ?? []).join(' , ')}`
+      : String(split),
+  );
+
+  // 只改开始时间时，时长必须保持不变（否则会变成"14:00 到次日 10:00"的 20 小时色块）
+  const blockHeight = await page.evaluate(`
+    const el = [...document.querySelectorAll('[role="button"]')]
+      .find(node => node.textContent?.includes('14:00验收周会'));
+    return el ? el.style.height : '';
+  `);
+  check('改完开始时间后仍是 1 小时，没有被撑成跨天', blockHeight === '56px', blockHeight || '未找到块');
+
+  // 13) 退出前清理日历测试数据（KEEP=1 时保留，方便事后查库）
+  if (process.env.KEEP === '1') {
+    console.log('  · KEEP=1：跳过清理');
+  } else {
+  await page.evaluate(`
+    await fetch('/api/auth/session', { credentials: 'include' });
+    return true;
+  `);
+
   // 9) 收尾：把本轮造的数据删干净，否则每次跑验收都在库里多堆几条
   const cleaned = await page.evaluate(`
     const s = await fetch('/api/auth/session', { credentials: 'include' }).then(r => r.json());
@@ -326,14 +472,20 @@ try {
       headers: { 'content-type': 'application/json', 'x-csrf-token': s.csrfToken },
       body: JSON.stringify({ cursor: 0, limit: 500 }),
     }).then(r => r.json());
+    const isJunk = (title) =>
+      String(title).startsWith('离线任务 ') || String(title).startsWith('另一台设备写的') ||
+      String(title).startsWith('验收周会');
     const junk = pull.changes.filter(c =>
-      c.table === 'task' && c.deletedAt === null && c.payload &&
-      (String(c.payload.title).startsWith('离线任务 ') || String(c.payload.title).startsWith('另一台设备写的')));
-    if (junk.length === 0) return 0;
+      c.table === 'task' && c.deletedAt === null && c.payload && isJunk(c.payload.title));
+    const junkIds = new Set(junk.map((c) => c.id));
+    // 系列删了，它的例外也得删，否则验收数据会在服务端留下孤儿
+    const junkExceptions = pull.changes.filter(c =>
+      c.table === 'recur_exception' && c.deletedAt === null && junkIds.has(c.payload?.seriesId));
+    if (junk.length === 0 && junkExceptions.length === 0) return 0;
     const now = Date.now();
-    const ops = junk.map((c, i) => ({
+    const ops = [...junk, ...junkExceptions].map((c, i) => ({
       opId: 'CL' + now.toString(36).toUpperCase() + i,
-      table: 'task', action: 'delete', id: c.id, baseRev: c.rev, fields: {},
+      table: c.table, action: 'delete', id: c.id, baseRev: c.rev, fields: {},
       hlc: { wall: now, counter: i, device: '01CLEANUPDEVICE00000000001' },
     }));
     await fetch('/api/sync/push', {
@@ -341,9 +493,10 @@ try {
       headers: { 'content-type': 'application/json', 'x-csrf-token': s.csrfToken },
       body: JSON.stringify({ deviceId: '01CLEANUPDEVICE00000000001', ops }),
     });
-    return junk.length;
+    return junk.length + junkExceptions.length;
   `);
   console.log(`  · 已清理 ${cleaned} 条验收数据`);
+  }
 
   console.log(`\n通过 ${pass} 项${failures.length ? `，失败 ${failures.length} 项` : ''}`);
   if (failures.length) {

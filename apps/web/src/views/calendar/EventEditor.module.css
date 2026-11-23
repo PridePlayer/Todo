@@ -1,0 +1,122 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: color-mix(in srgb, var(--n-1000) 28%, transparent);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh var(--sp-4) var(--sp-4);
+}
+
+.panel {
+  width: min(480px, 100%);
+  background: var(--n-0);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-md);
+  padding: var(--sp-5);
+}
+
+.field {
+  display: block;
+  margin-top: var(--sp-3);
+  min-width: 0;
+}
+
+.label {
+  display: block;
+  font-size: var(--t-xs);
+  line-height: var(--lh-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--n-500);
+  margin-bottom: 4px;
+}
+
+.input {
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: var(--t-body);
+  color: var(--n-900);
+  background: var(--n-0);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--a-500);
+  outline-offset: -1px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: var(--sp-3);
+}
+
+.rule {
+  margin-top: var(--sp-3);
+  font-size: var(--t-xs);
+  line-height: var(--lh-xs);
+  color: var(--n-500);
+}
+
+.rule code {
+  font-family: var(--font-mono);
+  background: var(--n-100);
+  padding: 1px 4px;
+  border-radius: var(--r-sm);
+  color: var(--n-700);
+}
+
+.actions {
+  margin-top: var(--sp-4);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.del,
+.cancel {
+  height: 30px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  color: var(--n-600);
+  background: var(--n-0);
+  cursor: pointer;
+}
+
+.del:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.cancel {
+  margin-left: auto;
+}
+
+.cancel:hover {
+  background: var(--n-100);
+}
+
+.note {
+  margin-top: var(--sp-3);
+  font-size: var(--t-xs);
+  line-height: var(--lh-xs);
+  color: var(--n-500);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+@media (max-width: 560px) {
+  .row {
+    grid-template-columns: 1fr 1fr;
+  }
+}

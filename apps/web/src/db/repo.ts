@@ -1,12 +1,24 @@
 import {
   DepthLimitError,
   MAX_DEPTH,
+  expandSeries,
   flagsOf,
   newTaskSchema,
+  parseRrule,
+  planAll,
+  planSkip,
+  planThisAndFollowing,
+  planThisOnly,
   quadrantOf,
   ulid,
+  type ExceptionDraft,
   type NewTask,
+  type Occurrence,
+  type OccurrencePatch,
   type Quadrant,
+  type RecurException,
+  type SeriesLike,
+  type SyncTable,
   type Tag,
   type Task,
   type TaskList,
@@ -58,7 +70,7 @@ async function pendingFor(id: string): Promise<OutboxOp[]> {
 }
 
 async function pushOp(op: {
-  table: 'task' | 'tag' | 'list';
+  table: SyncTable;
   action: 'create' | 'update' | 'delete';
   id: string;
   baseRev: number;
@@ -276,6 +288,13 @@ export class LocalTaskStore implements TaskStore {
       base.urgent = current.urgent;
       base.quadrant = current.quadrant;
     }
+    if (changes.rrule !== undefined) {
+      // 规则字符串必须先过校验：一旦写进库，视图会拿它去展开，
+      // 非法字符串会在每次渲染时抛错，症状是"整页白屏"而不是"这条规则没生效"
+      if (changes.rrule !== null) parseRrule(changes.rrule);
+      next.rrule = changes.rrule;
+      base.rrule = current.rrule;
+    }
 
     await db.tasks.put(next);
 
@@ -394,6 +413,24 @@ export class LocalTaskStore implements TaskStore {
       await pushOp({ table: 'task', action: 'delete', id: row.id, baseRev: row.rev, fields: {}, base: null });
     }
 
+    // 系列被删 → 它的例外必须一起走，否则服务端留下"系列不存在但例外还在"的孤儿，
+    // 而 M3 的出口条件正是要求这类孤儿为 0
+    for (const row of subtree) {
+      if (row.rrule === null) continue;
+      const exceptions = await this.exceptionsOf(row.id);
+      for (const exception of exceptions) {
+        await db.exceptions.put({ ...exception, deletedAt: t, updatedAt: t });
+        await pushOp({
+          table: 'recur_exception',
+          action: 'delete',
+          id: exception.id,
+          baseRev: exception.rev,
+          fields: {},
+          base: null,
+        });
+      }
+    }
+
     // 走到这里可能一条 op 都没新增（新建后立刻删除 = 本地直接清掉），
     // 但待推送条数变了，引擎得知道
     notifyLocalChange();
@@ -461,6 +498,155 @@ export class LocalTaskStore implements TaskStore {
     const rows = await this.lists();
     return rows[0] ?? INBOX;
   }
+
+  // ── 重复（M3） ────────────────────────────────────────────
+
+  async exceptionsOf(seriesId: string): Promise<RecurException[]> {
+    const rows = await db.exceptions.where('seriesId').equals(seriesId).toArray();
+    return rows.filter((row) => row.deletedAt === null);
+  }
+
+  async allExceptions(): Promise<RecurException[]> {
+    const rows = await db.exceptions.toArray();
+    return rows.filter((row) => row.deletedAt === null);
+  }
+
+  /**
+   * 设规则。重复必须有确定的起点，所以顺手把"只有日期没有时刻"的任务补成 09:00。
+   * 不补的话展开时找不到锚点，日历里会出现"这条任务明明重复了却一次都不显示"。
+   */
+  async setRrule(id: string, rrule: string | null): Promise<Task> {
+    const task = (await db.tasks.get(id)) ?? null;
+    if (!task) throw new Error('任务不存在');
+
+    const patch: TaskPatch = { rrule };
+    if (rrule !== null && task.startAt === null) {
+      const anchor = task.dueDate
+        ? new Date(`${task.dueDate}T09:00:00`).getTime()
+        : startOfHour(Date.now());
+      patch.startAt = anchor;
+      patch.endAt = anchor + 60 * 60 * 1000;
+    }
+    return this.patch(id, patch);
+  }
+
+  /**
+   * 三选项编辑的入口。
+   *
+   * `scope` 决定写哪张表，而不是写哪种 UI 状态：
+   *   this      → recur_exception(override)
+   *   following → 母体截断 + 新系列 + 例外改挂
+   *   all       → 母体
+   */
+  async editOccurrence(
+    seriesId: string,
+    originalStart: number,
+    scope: 'this' | 'following' | 'all',
+    patch: OccurrencePatch,
+  ): Promise<void> {
+    const task = (await db.tasks.get(seriesId)) ?? null;
+    if (!task) throw new Error('重复系列不存在');
+
+    if (scope === 'all') {
+      await this.patch(seriesId, patch as TaskPatch);
+      return;
+    }
+
+    const exceptions = await this.exceptionsOf(seriesId);
+    const series = toSeriesLike(task, exceptions);
+    const occurrence = findOccurrence(series, originalStart);
+    if (!occurrence) throw new Error('找不到这一次，可能已被其他设备修改');
+
+    if (scope === 'this') {
+      const draft = planThisOnly(series, occurrence, patch);
+      if (draft) await this.upsertException(draft);
+      return;
+    }
+
+    const plan = planThisAndFollowing(series, occurrence, patch);
+
+    // 先把母体截断，再建新系列：反过来的话，中间会有一瞬间
+    // "旧系列还带着周五 + 新系列也有周五"，界面上闪一下重复的事件块。
+    // 而删母体必须放到最后——例外要先改挂，否则中间态是孤儿（出口条件查的就是它）
+    if (!plan.retireMaster) {
+      await this.patch(seriesId, { rrule: plan.masterRrule! });
+    }
+
+    const created = await this.create({
+      title: plan.next.title,
+      quadrant: task.quadrant,
+      parentId: task.parentId,
+      listId: task.listId,
+      note: task.note ?? undefined,
+      location: task.location,
+      startAt: plan.next.startAt,
+      endAt: plan.next.endAt,
+      tagIds: task.tagIds,
+    });
+    await this.patch(created.id, {
+      rrule: plan.next.rrule,
+      ...(plan.next.patch.note !== undefined ? { note: plan.next.patch.note } : {}),
+      ...(plan.next.patch.location !== undefined ? { location: plan.next.patch.location } : {}),
+    });
+
+    for (const exception of exceptions) {
+      if (exception.originalStart < occurrence.originalStart) continue;
+      const now = nowMs();
+      await db.exceptions.put({ ...exception, seriesId: created.id, updatedAt: now });
+      await pushOp({
+        table: 'recur_exception',
+        action: 'update',
+        id: exception.id,
+        baseRev: exception.rev,
+        fields: { seriesId: created.id, updatedAt: now },
+        base: { seriesId },
+      });
+    }
+
+    if (plan.retireMaster) {
+      // cutoff 就是第一次 → 整条系列都被"及后续"换掉，母体最后再消失
+      await this.softDelete(seriesId);
+    }
+  }
+
+  /** 删除某一次（仅本次）：写一条 kind='deleted' 的例外，母体不动 */
+  async skipOccurrence(seriesId: string, originalStart: number): Promise<void> {
+    await this.upsertException(planSkip(seriesId, originalStart));
+  }
+
+  private async upsertException(draft: ExceptionDraft): Promise<RecurException> {
+    const siblings = await db.exceptions.where('seriesId').equals(draft.seriesId).toArray();
+    const existing = siblings.find((row) => row.originalStart === draft.originalStart);
+    const now = nowMs();
+
+    if (existing) {
+      // 复活路径：同一次被跳过之后又想改回来时，复用同一行（服务端的唯一键
+      // 是 (series_id, original_start)，新建一行会被拒绝），deletedAt 必须显式清零
+      const row: RecurException = { ...existing, ...draft, deletedAt: null, updatedAt: now };
+      await db.exceptions.put(row);
+      await pushOp({
+        table: 'recur_exception',
+        action: 'update',
+        id: row.id,
+        baseRev: existing.rev,
+        fields: exceptionFields(row),
+        base: exceptionFields(existing),
+      });
+      return row;
+    }
+
+    const row: RecurException = {
+      id: ulid(now),
+      ...draft,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+      rev: 0, // 0 = 服务端还没有这一行
+    };
+    await db.exceptions.put(row);
+    await pushOp({ table: 'recur_exception', action: 'create', id: row.id, baseRev: 0, fields: exceptionFields(row), base: null });
+    return row;
+  }
 }
 
 /** 从对象里挑出指定键，用于构造"新值" */
@@ -468,6 +654,60 @@ function pick<T extends object>(source: T, keys: readonly string[]): Record<stri
   const out: Record<string, unknown> = {};
   for (const key of keys) out[key] = (source as Record<string, unknown>)[key];
   return out;
+}
+
+function startOfHour(ts: number): number {
+  const d = new Date(ts);
+  d.setMinutes(0, 0, 0);
+  return d.getTime();
+}
+
+/**
+ * 例外行 → 线上字段。
+ * `rev` 不进 fields：它是服务端维护的版本号，客户端只能读不能写
+ * （写进去会被 task-map 过滤掉，但留在这里会让人误以为可以控制）。
+ */
+function exceptionFields(row: RecurException): Record<string, unknown> {
+  return {
+    seriesId: row.seriesId,
+    originalStart: row.originalStart,
+    kind: row.kind,
+    overrideStart: row.overrideStart,
+    overrideEnd: row.overrideEnd,
+    overrideTitle: row.overrideTitle,
+    payload: row.payload,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    deletedAt: row.deletedAt,
+  };
+}
+
+/**
+ * 任务 → 可展开的系列。
+ *
+ * 锚点的兜底顺序是 startAt → dueDate 09:00 → createdAt：
+ * 展开必须有确定的时刻，而"只有日期"的任务在日历里也要能重复出现。
+ */
+function toSeriesLike(task: Task, exceptions: readonly RecurException[]): SeriesLike {
+  const anchor =
+    task.startAt ??
+    (task.dueDate ? new Date(`${task.dueDate}T09:00:00`).getTime() : task.createdAt);
+  return {
+    id: task.id,
+    title: task.title,
+    startAt: anchor,
+    endAt: task.endAt,
+    allDay: task.allDay && task.startAt === null,
+    rrule: task.rrule,
+    exceptions,
+  };
+}
+
+/** 在 ±31 天窗口里找出 originalStart 匹配的那一次（它可能被前一个例外挪过位置） */
+function findOccurrence(series: SeriesLike, originalStart: number): Occurrence | null {
+  const window = 31 * 24 * 60 * 60 * 1000;
+  const list = expandSeries(series, originalStart - window, originalStart + window);
+  return list.find((item) => item.originalStart === originalStart) ?? null;
 }
 
 export const repo = new LocalTaskStore();

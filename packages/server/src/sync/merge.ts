@@ -115,6 +115,14 @@ export function mergeFields(
       continue;
     }
 
+    // ── 例外类型：删除优先 ──
+    // "跳过这一次"和"改写这一次"落同一次时，删掉更安全：
+    // 保留一条被改写的会议比少一条会议更容易造成"两个人去了没人"的事故
+    if (table === 'recur_exception' && field === 'kind') {
+      applied[field] = current.kind === 'deleted' || incoming[field] === 'deleted' ? 'deleted' : incoming[field];
+      continue;
+    }
+
     // ── 标签取并集 ──
     if (field === 'tagIds') {
       applied[field] = unionTags(base?.tagIds, incoming[field], current[field]);

@@ -3,11 +3,12 @@ import { useEffect, useState } from 'react';
 import { useSyncStatus } from '../hooks/useSync';
 import { startAutoSync, syncNow, type SyncStatus } from '../sync/engine';
 import { AllTasksView } from '../views/AllTasks';
+import { CalendarView } from '../views/calendar/CalendarView';
 import { QuadrantView } from '../views/Quadrant';
 import { Settings } from '../views/Settings';
 import styles from './AppShell.module.css';
 
-type ViewKey = 'quadrant' | 'all' | 'settings';
+type ViewKey = 'quadrant' | 'calendar' | 'all' | 'settings';
 
 const VIEWS: { key: ViewKey; label: string; title: string; path: string }[] = [
   {
@@ -15,6 +16,12 @@ const VIEWS: { key: ViewKey; label: string; title: string; path: string }[] = [
     label: '四象限',
     title: '四象限',
     path: 'M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z',
+  },
+  {
+    key: 'calendar',
+    label: '日历',
+    title: '日历',
+    path: 'M4 6h16v14H4zM4 10h16M9 3v4M15 3v4',
   },
   {
     key: 'all',
@@ -138,6 +145,7 @@ export function AppShell({ user, onLogout }: AppShellProps) {
 
         <main className={styles.content}>
           {view === 'quadrant' ? <QuadrantView /> : null}
+          {view === 'calendar' ? <CalendarView /> : null}
           {view === 'all' ? <AllTasksView /> : null}
           {view === 'settings' ? <Settings user={user} /> : null}
         </main>

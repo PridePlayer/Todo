@@ -105,3 +105,49 @@ export {
   type OAuthVerifyResult,
   type OAuthCallbackReason,
 } from './models/oauth.js';
+
+export {
+  recurExceptionSchema,
+  recurExceptionKindSchema,
+  exceptionKey,
+  type RecurException,
+  type RecurExceptionKind,
+} from './models/recur-exception.js';
+
+export {
+  parseRrule,
+  formatRrule,
+  rruleFromPreset,
+  toIcalDate,
+  weekdayOf,
+  weekdayIndex,
+  RruleError,
+  WEEKDAYS,
+  type Freq,
+  type Rule,
+  type Weekday,
+  type RrulePreset,
+} from './recurrence/rrule.js';
+
+export {
+  expandSeries,
+  expandTasks,
+  rawStarts,
+  durationOf,
+  type Occurrence,
+  type SeriesLike,
+  type RecurExceptionLike,
+  type ExceptionKind,
+} from './recurrence/expand.js';
+
+export {
+  planThisOnly,
+  planSkip,
+  planAll,
+  planThisAndFollowing,
+  lastStartBefore,
+  partitionExceptions,
+  type OccurrencePatch,
+  type ExceptionDraft,
+  type SplitPlan,
+} from './recurrence/exception.js';

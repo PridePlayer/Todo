@@ -1,0 +1,81 @@
+.block {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 3px 6px;
+  /* 实心 = 日历事件（描边留给待办，两者的语义不能混） */
+  background: var(--a-500);
+  color: var(--n-0);
+  border-radius: var(--r-sm);
+  font-size: var(--t-xs);
+  line-height: 1.25;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  text-align: left;
+}
+
+.block:hover {
+  background: var(--a-600);
+}
+
+.block:focus-visible {
+  outline: 2px solid var(--n-1000);
+  outline-offset: 1px;
+}
+
+.block[data-mode='move'] {
+  cursor: grabbing;
+  opacity: 0.9;
+}
+
+.block[data-mode='resize'] {
+  cursor: ns-resize;
+}
+
+.block[data-compact='true'] {
+  padding: 1px 4px;
+}
+
+.time {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+.title {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 底部 6px 是拉伸手柄：太窄点不中，太宽会挡住点击打开 */
+.resize {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.resize::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 16px;
+  height: 2px;
+  margin-left: -8px;
+  background: var(--n-0);
+  opacity: 0;
+}
+
+.block:hover .resize::after {
+  opacity: 0.6;
+}
