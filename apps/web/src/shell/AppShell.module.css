@@ -1,0 +1,206 @@
+.shell {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  background: var(--n-0);
+}
+
+.rail {
+  flex: 0 0 var(--rail-w);
+  width: var(--rail-w);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-3) 0;
+  border-right: var(--line);
+}
+
+.logo {
+  width: 24px;
+  height: 24px;
+  background: var(--n-1000);
+  margin-bottom: var(--sp-4);
+}
+
+.railBtn {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  color: var(--n-400);
+  position: relative;
+}
+
+.railBtn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: square;
+}
+
+.railBtn:hover {
+  color: var(--n-900);
+  background: var(--n-100);
+}
+
+.railOn {
+  color: var(--a-500);
+}
+
+.railOn:hover {
+  color: var(--a-500);
+}
+
+/* 选中指示线贴在窗口最左侧：按钮左边缘距窗口 = (64-40)/2 = 12px */
+.railOn::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--a-500);
+}
+
+.body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  flex: 0 0 var(--topbar-h);
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-4);
+  border-bottom: var(--line);
+}
+
+.topTitle {
+  font-size: var(--t-md);
+  line-height: var(--lh-md);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.date {
+  font-size: var(--t-sm);
+  color: var(--n-500);
+  white-space: nowrap;
+}
+
+.topRight {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.pill {
+  font-size: var(--t-xs);
+  line-height: var(--lh-xs);
+  padding: 2px 8px;
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-pill);
+  color: var(--n-500);
+  white-space: nowrap;
+}
+
+.pill[data-state='ok'] {
+  border-color: var(--a-200);
+  color: var(--a-600);
+}
+
+.pill[data-state='warn'] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.email {
+  font-size: var(--t-sm);
+  color: var(--n-500);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghost {
+  font-size: var(--t-sm);
+  color: var(--n-600);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.ghost:hover {
+  border-color: var(--n-500);
+  color: var(--n-900);
+}
+
+.content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobtab {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .rail {
+    display: none;
+  }
+
+  .topbar {
+    padding: 0 var(--sp-3);
+  }
+
+  .date,
+  .email {
+    display: none;
+  }
+
+  .mobtab {
+    flex: 0 0 var(--mobtab-h);
+    height: var(--mobtab-h);
+    display: flex;
+    border-top: var(--line);
+    background: var(--n-0);
+  }
+
+  .mobBtn {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    font-size: var(--t-xs);
+    color: var(--n-500);
+  }
+
+  .mobBtn svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+  }
+
+  .mobBtn[data-on='true'] {
+    color: var(--a-500);
+  }
+}

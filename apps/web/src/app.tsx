@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
 import styles from './app.module.css';
 import { clearClientState } from './logout';
-import { Home } from './views/Home';
+import { AppShell } from './shell/AppShell';
 import { Login } from './views/Login';
 
 type BootState =
@@ -67,5 +67,5 @@ export function App() {
     return <Login onSuccess={handleLoggedIn} />;
   }
 
-  return <Home user={boot.user} onLogout={() => void handleLogout()} />;
+  return <AppShell user={boot.user} onLogout={() => void handleLogout()} />;
 }

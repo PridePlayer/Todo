@@ -29,6 +29,43 @@ export {
   type ApiClientOptions,
 } from './api/client';
 
+export { ulid, isUlid, ULID_LENGTH } from './id';
+
+export {
+  MAX_DEPTH,
+  QUADRANTS,
+  taskSchema,
+  newTaskSchema,
+  tagSchema,
+  listSchema,
+  isOverdue,
+  type Task,
+  type NewTask,
+  type Tag,
+  type TaskList,
+  type Quadrant,
+} from './models/task';
+
+export {
+  quadrantOf,
+  flagsOf,
+  QUADRANT_META,
+  QUADRANT_ORDER,
+  shiftQuadrant,
+  toDateInput,
+  toTimeInput,
+  combineDateTime,
+  formatTimeRange,
+  formatDateLabel,
+  taskMetaText,
+  compareTasks,
+  compareSubtasks,
+  visible,
+  type QuadrantMeta,
+} from './quadrant';
+
+export { DepthLimitError, type TaskStore, type TaskPatch } from './repo/types';
+
 export {
   oauthAccountSchema,
   oauthStatusSchema,
