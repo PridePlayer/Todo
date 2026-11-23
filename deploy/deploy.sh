@@ -36,6 +36,12 @@ if [ -e apps/web/dist/.user.ini ]; then
   chattr -i apps/web/dist/.user.ini 2>/dev/null || true
   rm -f apps/web/dist/.user.ini
 fi
+# ── 先构建 core ──
+# server 与 web 都从 `@grid/core/dist` 引入（package.json 的 main 指过去），
+# 而 dist 在 .gitignore 里、不进仓库。换一台干净的机器时它根本不存在，
+# 跳过这一步会在 `tsc` 里报 "Cannot find module '@grid/core'"，
+# 看着像依赖没装好，其实是没先构建。重新部署时它也是幂等的（几秒钟）。
+pnpm --filter @grid/core build
 pnpm --filter @grid/web build
 pnpm --filter @grid/server build
 
