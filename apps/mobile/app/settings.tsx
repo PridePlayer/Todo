@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useApp } from '../../src/store';
-import { C, FONT, HIT, SP } from '../../src/theme';
+import { useApp } from '../src/store';
+import { C, FONT, HIT, SP } from '../src/theme';
 
 const PHASE_LABEL: Record<string, string> = {
   idle: '已同步',

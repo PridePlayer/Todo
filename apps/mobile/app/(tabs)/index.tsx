@@ -11,7 +11,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useApp } from '../../src/store';
 import { C, FONT, HIT, SP } from '../../src/theme';
 
@@ -24,6 +26,7 @@ function todayLabel(): string {
 
 export default function TodayScreen() {
   const { snapshot, phase, pending, refresh, toggleTask, createTask } = useApp();
+  const router = useRouter();
   const [title, setTitle] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -66,11 +69,22 @@ export default function TodayScreen() {
         keyboardVerticalOffset={0}
       >
         <View style={styles.head}>
-          <Text style={styles.date}>{todayLabel()}</Text>
-          <Text style={styles.count}>
-            {open.length} 项待办
-            {doneToday > 0 ? ` · 今日已完成 ${doneToday}` : ''}
-          </Text>
+          <View style={styles.headLeft}>
+            <Text style={styles.date}>{todayLabel()}</Text>
+            <Text style={styles.count}>
+              {open.length} 项待办
+              {doneToday > 0 ? ` · 今日已完成 ${doneToday}` : ''}
+            </Text>
+          </View>
+          {/* 设置收进角落：底部 tab 是高频动作，账号/地址这类低频项不该占一格 */}
+          <Pressable
+            onPress={() => router.push('/settings')}
+            style={styles.settingsBtn}
+            accessibilityRole="button"
+            accessibilityLabel="设置"
+          >
+            <Ionicons name="settings-outline" size={22} color={C.n600} />
+          </Pressable>
         </View>
 
         {phase === 'offline' ? (
@@ -154,7 +168,22 @@ function Row({ task, onToggle }: { task: Task; onToggle: () => void }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.n0 },
   flex: { flex: 1 },
-  head: { paddingHorizontal: SP[4], paddingTop: SP[4], paddingBottom: SP[3] },
+  head: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: SP[4],
+    paddingTop: SP[4],
+    paddingBottom: SP[3],
+  },
+  headLeft: { flex: 1 },
+  settingsBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -4,
+  },
   date: { fontSize: FONT.xl, color: C.n900, fontWeight: '600' },
   count: { marginTop: SP[1], fontSize: FONT.base, color: C.n500 },
   banner: {

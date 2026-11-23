@@ -8,17 +8,17 @@ import { C, FONT } from '../../src/theme';
 const TAB_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   index: 'today-outline',
   list: 'list-outline',
+  calendar: 'calendar-outline',
   quadrant: 'grid-outline',
   habits: 'checkmark-circle-outline',
-  settings: 'settings-outline',
 };
 
 const TAB_TITLE: Record<string, string> = {
   index: '今日',
   list: '列表',
+  calendar: '日历',
   quadrant: '四象限',
   habits: '打卡',
-  settings: '设置',
 };
 
 export default function TabsLayout() {
@@ -58,7 +58,7 @@ export default function TabsLayout() {
         ),
       })}
     >
-      {(['index', 'list', 'quadrant', 'habits', 'settings'] as const).map((name) => (
+      {(['index', 'list', 'calendar', 'quadrant', 'habits'] as const).map((name) => (
         <Tabs.Screen
           key={name}
           name={name}

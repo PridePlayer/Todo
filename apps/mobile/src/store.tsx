@@ -13,6 +13,7 @@ import {
   type Habit,
   type HabitLog,
   type Hlc,
+  type RecurException,
   type SyncOp,
   type Tag,
   type Task,
@@ -45,9 +46,11 @@ export interface Snapshot {
   habits: Habit[];
   logs: HabitLog[];
   events: CalEvent[];
+  /** 重复事件的"某一次被改/被删"。日历展开时必须带上，否则删掉的那次还会显示 */
+  exceptions: RecurException[];
 }
 
-const EMPTY: Snapshot = { tasks: [], lists: [], tags: [], habits: [], logs: [], events: [] };
+const EMPTY: Snapshot = { tasks: [], lists: [], tags: [], habits: [], logs: [], events: [], exceptions: [] };
 
 export type SyncPhase = 'idle' | 'syncing' | 'offline' | 'error';
 
@@ -161,12 +164,16 @@ function decode(rows: DocRow[]): Snapshot {
     if (parsed.success) events.push(parsed.data);
   }
 
-  // 未使用的 schema 在这里保持引用：它们对应表已在 SYNC_TABLES 中，
-  // 解析器缺一个就会静默丢一类数据，留 TODO 比留空白好排查
-  void recurExceptionSchema;
+  const exceptions: RecurException[] = [];
+  for (const row of pick('recur_exception')) {
+    const parsed = recurExceptionSchema.safeParse({ ...row.payload, id: row.id, rev: row.rev, deletedAt: null });
+    if (parsed.success) exceptions.push(parsed.data);
+  }
+
+  // calendar_source 现在只用于设置页（日历源开关），先不解析进 snapshot
   void calendarSourceSchema;
 
-  return { tasks, lists, tags, habits, logs, events };
+  return { tasks, lists, tags, habits, logs, events, exceptions };
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
