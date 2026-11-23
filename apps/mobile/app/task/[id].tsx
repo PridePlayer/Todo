@@ -1,10 +1,23 @@
-import { QUADRANT_META, QUADRANT_ORDER, rruleFromPreset, type Quadrant, type RrulePreset } from '@grid/core';
+import {
+  QUADRANT_META,
+  QUADRANT_ORDER,
+  WEEKDAYS,
+  buildRrule,
+  parseRrule,
+  rruleFromPreset,
+  weekdayOf,
+  type Quadrant,
+  type RrulePreset,
+  type Weekday,
+} from '@grid/core';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '../../src/store';
 import { C, FONT, HIT, SP } from '../../src/theme';
+
+const WEEKDAY_CN: Record<Weekday, string> = { MO: '一', TU: '二', WE: '三', TH: '四', FR: '五', SA: '六', SU: '日' };
 
 const REPEAT_LABEL: { key: RrulePreset | 'none'; label: string }[] = [
   { key: 'none', label: '不重复' },
@@ -33,6 +46,9 @@ export default function TaskDetailScreen() {
   const [note, setNote] = useState(task?.note ?? '');
   const [dueDate, setDueDate] = useState(task?.dueDate ?? '');
   const [tagInput, setTagInput] = useState('');
+  // 必须在这里声明，不能放到 early return 之后：hooks 的数量在每次渲染里都要一致，
+  // task 不存在时提前 return 会让两者不等，React 直接抛 "Rendered fewer hooks"
+  const [repeatDays, setRepeatDays] = useState<Weekday[]>([]);
 
   // 同步拉取可能在详情页打开后才把这条写进来，等它到了再填一次
   useEffect(() => {
@@ -40,7 +56,9 @@ export default function TaskDetailScreen() {
     setTitle(task.title);
     setNote(task.note ?? '');
     setDueDate(task.dueDate ?? '');
-  }, [task?.id]);
+    // 同步拉取可能在页面打开后才改了规则，这里要跟着刷
+    setRepeatDays(task.rrule ? (parseRrule(task.rrule).byDay ?? []) : []);
+  }, [task?.id, task?.rrule]);
 
   if (!task) {
     return (
@@ -86,8 +104,33 @@ export default function TaskDetailScreen() {
 
   function applyRepeat(preset: RrulePreset | 'none') {
     const anchor = dueDate ? new Date(`${dueDate}T09:00:00`).getTime() : Date.now();
-    const rrule = preset === 'none' ? null : rruleFromPreset(preset, anchor);
+    // "每周"要保留用户已勾的星期：否则一碰下拉框就退回"按当天星期"，
+    // 周一勾选的"每周三"会被静默改掉
+    const rrule =
+      preset === 'none'
+        ? null
+        : preset === 'weekly'
+          ? buildRrule({
+              freq: 'WEEKLY',
+              byDay: repeatDays.length > 0 ? repeatDays : [weekdayOf(new Date(anchor))],
+            })
+          : rruleFromPreset(preset, anchor);
     void patchTask(task!.id, { rrule });
+  }
+
+  function toggleRepeatDay(day: Weekday) {
+    const next = repeatDays.includes(day)
+      ? repeatDays.filter((d) => d !== day)
+      : [...repeatDays, day].sort((a, b) => WEEKDAYS.indexOf(a) - WEEKDAYS.indexOf(b));
+    setRepeatDays(next);
+    const anchor = dueDate ? new Date(`${dueDate}T09:00:00`).getTime() : Date.now();
+    void patchTask(task!.id, {
+      // 全部取消勾选时退回"按当天星期"，而不是留下 FREQ=WEEKLY;BYDAY= 空值
+      rrule: buildRrule({
+        freq: 'WEEKLY',
+        byDay: next.length > 0 ? next : [weekdayOf(new Date(anchor))],
+      }),
+    });
   }
 
   function toggleTag(tagId: string) {
@@ -121,15 +164,22 @@ export default function TaskDetailScreen() {
 
   // 当前重复规则反查成预设：rrule 里没有 FREQ 之外的定位信息，
   // 逐条比对字符串是唯一可靠的办法，用 includes 判断会误命中 COUNT 等后缀
-  const currentPreset: RrulePreset | 'none' = (() => {
+  const currentPreset: RrulePreset | 'none' | 'weekly-custom' = (() => {
     if (!task.rrule) return 'none';
+    const rule = parseRrule(task.rrule);
+    // 带自选星期的每周：预设里没有"MO,WE"这种，要走周几按钮
+    if (rule.freq === 'WEEKLY' && (rule.byDay?.length ?? 0) > 0 && rule.bySetPos === null && rule.byMonthDay === null) {
+      return rule.byDay!.join(',') === 'MO,TU,WE,TH,FR' ? 'weekday' : 'weekly';
+    }
     for (const item of REPEAT_LABEL) {
       if (item.key === 'none') continue;
       const anchor = task.startAt ?? (task.dueDate ? new Date(`${task.dueDate}T09:00:00`).getTime() : Date.now());
       if (rruleFromPreset(item.key, anchor) === task.rrule) return item.key;
     }
-    return 'none';
+    // 认不出来的规则原样保留（比如导入的 COUNT=6），不谎报成"不重复"
+    return 'weekly-custom';
   })();
+
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -233,6 +283,26 @@ export default function TaskDetailScreen() {
               </Pressable>
             ))}
           </View>
+
+          {(currentPreset === 'weekly' || currentPreset === 'weekly-custom') && (
+            <View style={[styles.row, { marginTop: SP[2] }]} accessibilityLabel="重复的星期">
+              {WEEKDAYS.map((day) => {
+                const on = repeatDays.includes(day);
+                return (
+                  <Pressable
+                    key={day}
+                    onPress={() => toggleRepeatDay(day)}
+                    style={[styles.chip, on && styles.chipOn]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
+                  >
+                    <Text style={[styles.chipText, on && styles.onText]}>{WEEKDAY_CN[day]}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
           <Text style={styles.hint}>
             重复以第一条的日期为锚点。改日期后再点一次重复，才会按新日期重算。
           </Text>
@@ -347,7 +417,7 @@ const styles = StyleSheet.create({
   quadrantTitle: { marginTop: 2, fontSize: FONT.sm, color: C.n700 },
   onText: { color: C.n0 },
   chip: {
-    minHeight: 36,
+    height: 36,
     paddingHorizontal: SP[3],
     justifyContent: 'center',
     borderWidth: 1,

@@ -213,6 +213,38 @@ export function rruleFromPreset(preset: RrulePreset, anchor: number): string | n
   }
 }
 
+export interface RruleInput {
+  freq: Freq;
+  /** WEEKLY：哪几天；不给就是"按锚点的星期" */
+  byDay?: readonly Weekday[];
+  /** MONTHLY / YEARLY：每月几号 */
+  byMonthDay?: readonly number[];
+  bySetPos?: number | null;
+  interval?: number;
+  count?: number | null;
+  until?: number | null;
+}
+
+/**
+ * 从 UI 选项拼规则。
+ *
+ * 不让 UI 自己拼字符串再过 parseRrule：拼接的自由度太高 —— BYDAY 的顺序、
+ * INTERVAL=1 该不该写、UNTIL 的 UTC 格式都会出错，而 parseRrule 只能判断
+ * "语法合不合法"，判断不出"是不是你想要的那条"。
+ * 这里收敛成唯一出口，UI 只提供语义参数。
+ */
+export function buildRrule(input: RruleInput): string {
+  return formatRrule({
+    freq: input.freq,
+    interval: input.interval && input.interval > 1 ? input.interval : 1,
+    byDay: input.byDay && input.byDay.length > 0 ? [...input.byDay] : null,
+    byMonthDay: input.byMonthDay && input.byMonthDay.length > 0 ? [...input.byMonthDay] : null,
+    bySetPos: input.bySetPos ?? null,
+    count: input.count ?? null,
+    until: input.until ?? null,
+  });
+}
+
 function base(partial: Partial<Rule>): Rule {
   return {
     freq: 'DAILY',

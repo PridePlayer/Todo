@@ -45,6 +45,10 @@ export function AllTasksView() {
   const [status, setStatus] = useState<StatusFilter>('open');
   const [sort, setSort] = useState<SortMode>('manual');
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  // 拖拽到标签上给任务打标签。只在 hover 到某个标签时置位，
+  // 用来在拖动过程中给目标一个"放这里"的高亮 —— 没有它，
+  // 用户不知道鼠标悬停的那个 chips 到底收不收。
+  const [dropTag, setDropTag] = useState<string | null>(null);
   // 新建不再要求先选象限：默认落 04（不重要不紧急），也就是收件箱的位置。
   // "收集"这一步一旦要求做分类决策，绝大多数人会在这一步放弃记录。
   const quickTarget: Quadrant = 4;
@@ -228,8 +232,24 @@ export function AllTasksView() {
               type="button"
               className={styles.tagChip}
               data-on={tagFilter === tag.id}
+              data-drop={dropTag === tag.id}
               aria-pressed={tagFilter === tag.id}
               onClick={() => setTagFilter(tagFilter === tag.id ? null : tag.id)}
+              onDragOver={(event) => {
+                // 必须 preventDefault，否则 drop 事件根本不会触发
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'move';
+                setDropTag(tag.id);
+              }}
+              onDragLeave={() => setDropTag((prev) => (prev === tag.id ? null : prev))}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDropTag(null);
+                const taskId = event.dataTransfer.getData('text/plain');
+                const task = alive.find((t) => t.id === taskId);
+                if (!task || task.tagIds.includes(tag.id)) return;
+                void repo.patch(task.id, { tagIds: [...task.tagIds, tag.id] });
+              }}
             >
               #{tag.name}
             </button>
@@ -264,7 +284,7 @@ export function AllTasksView() {
               indent={row.indent}
               childCount={row.childCount}
               collapsed={row.collapsed}
-              draggable={false}
+              draggable
               badge={<span className={styles.quad}>{QUADRANT_META[row.task.quadrant].no}</span>}
               onToggle={() => void repo.toggleComplete(row.task.id)}
               onOpen={() => {

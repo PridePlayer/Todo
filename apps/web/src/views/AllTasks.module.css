@@ -119,6 +119,14 @@
   color: var(--n-0);
 }
 
+/* 拖拽悬停：给"放这里"一个明确的视觉反馈。只靠边框变色不够，
+   拖动时光标已经是抓手，需要更亮的底色把目标从一排 chips 里挑出来 */
+.tagChip[data-drop='true'] {
+  background: var(--a-100);
+  border-color: var(--a-500);
+  color: var(--a-600);
+}
+
 .quickSlot {
   grid-column: 1;
   grid-row: 3;

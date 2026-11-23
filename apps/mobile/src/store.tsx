@@ -502,6 +502,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const device = await ensureDeviceId();
       const now = Date.now();
       const nextValue = Math.max(0, (existing?.value ?? 0) + delta);
+
+      // 算到 0 就是"取消打卡"，必须**删掉这条记录**，不能写 value=0。
+      //
+      // 服务端对 habit_log.value 的合并是 GREATEST(local, remote) —— 那条规则
+      // 正确地挡住了"两台设备各点一次被相加"，但也同样挡住了"把数字改小"：
+      // 推上去的 0 会被服务端现有的 1 又并回来，界面表现为"取消了又自己打回来"。
+      // 删除是幂等的、能传播的，且与 max 合并不冲突。
+      //
+      // 代价：计数型只能往上加，想减少就只能清零。这是合并语义本身决定的，
+      // 而不是 UI 偷懒 —— 见 docs/03 §4.5。
+      if (nextValue <= 0) {
+        if (!existing) return;
+        await softDeleteRow('habit_log', id, now);
+        await queueOp({
+          opId: ulid(),
+          table: 'habit_log',
+          action: 'delete',
+          id,
+          baseRev: existing.rev,
+          fields: {},
+          hlc: nextHlc(device),
+        });
+        setSnapshot((prev) => ({ ...prev, logs: prev.logs.filter((l) => l.id !== id) }));
+        setPending((n) => n + 1);
+        void refresh();
+        return;
+      }
+
       const next: HabitLog = {
         id,
         habitId,

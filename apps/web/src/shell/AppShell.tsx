@@ -13,6 +13,14 @@ type ViewKey = 'quadrant' | 'calendar' | 'habits' | 'all' | 'settings';
 
 const VIEWS: { key: ViewKey; label: string; title: string; path: string }[] = [
   {
+    // 首页是待办列表，不是四象限：四象限是"分类看"的视图，
+    // 不该承担"打开就干活"的入口。收集 → 列表 → 分类，这个顺序才顺。
+    key: 'all',
+    label: '待办',
+    title: '待办',
+    path: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  },
+  {
     key: 'quadrant',
     label: '四象限',
     title: '四象限',
@@ -30,12 +38,6 @@ const VIEWS: { key: ViewKey; label: string; title: string; path: string }[] = [
     title: '打卡',
     // 圆圈 + 勾：打卡的语义是"今天这一格被填上了"，不是"完成了一件事"
     path: 'M12 21a9 9 0 100-18 9 9 0 000 18zM8.2 12.4l2.6 2.6 5-5.4',
-  },
-  {
-    key: 'all',
-    label: '全部待办',
-    title: '全部待办',
-    path: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
   },
   {
     key: 'settings',
@@ -96,7 +98,7 @@ function SyncPill() {
 }
 
 export function AppShell({ user, onLogout }: AppShellProps) {
-  const [view, setView] = useState<ViewKey>('quadrant');
+  const [view, setView] = useState<ViewKey>('all');
   const status = useSyncStatus();
   const active = VIEWS.find((item) => item.key === view) ?? VIEWS[0]!;
 

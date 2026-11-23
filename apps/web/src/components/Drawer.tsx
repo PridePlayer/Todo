@@ -2,13 +2,18 @@ import {
   MAX_DEPTH,
   QUADRANT_META,
   QUADRANT_ORDER,
+  WEEKDAYS,
+  buildRrule,
   combineDateTime,
   formatTimeRange,
+  parseRrule,
   rruleFromPreset,
+  weekdayOf,
   toDateInput,
   toTimeInput,
   type Quadrant,
   type RrulePreset,
+  type Weekday,
   type Tag,
   type Task,
   type TaskPatch,
@@ -35,12 +40,16 @@ interface DrawerProps {
 const PRIORITY_LABEL: Record<number, string> = { 0: '无', 1: '低', 2: '中', 3: '高' };
 const DAY_MS = 86_400_000;
 
+type RepeatFreq = 'none' | 'daily' | 'weekday' | 'weekly' | 'monthly' | 'monthly-last-workday' | 'yearly' | 'custom';
+
+const WEEKDAY_CN: Record<Weekday, string> = { MO: '一', TU: '二', WE: '三', TH: '四', FR: '五', SA: '六', SU: '日' };
+
 /** 面向 UI 的重复预设。值直接是 core 的 RrulePreset，不另造一套名字 */
 const REPEAT_OPTIONS: { key: RrulePreset | 'none'; label: string }[] = [
   { key: 'none', label: '不重复' },
   { key: 'daily', label: '每天' },
   { key: 'weekday', label: '每个工作日' },
-  { key: 'weekly', label: '每周（按当天星期）' },
+  { key: 'weekly', label: '每周（选日）' },
   { key: 'monthly', label: '每月（按当天几号）' },
   { key: 'monthly-last-workday', label: '每月最后一个周五' },
   { key: 'yearly', label: '每年' },
@@ -86,19 +95,64 @@ export function Drawer({
    * 用户一碰下拉框就把 COUNT 丢了 —— 结束条件静默消失是最难发现的那种数据损坏。
    */
   const repeatAnchor = task.startAt ?? (task.dueDate ? combineDateTime(task.dueDate, '09:00') : Date.now());
-  const repeatPreset: RrulePreset | 'none' | 'custom' = (() => {
-    if (!task.rrule) return 'none';
-    for (const option of REPEAT_OPTIONS) {
-      if (option.key === 'none') continue;
-      if (rruleFromPreset(option.key, repeatAnchor) === task.rrule) return option.key;
-    }
-    return 'custom';
-  })();
+  const [repeatFreq, setRepeatFreq] = useState<RepeatFreq>('none');
+  const [repeatDays, setRepeatDays] = useState<Weekday[]>([]);
+  const [repeatCount, setRepeatCount] = useState<number | null>(null);
 
-  async function applyRepeat(next: RrulePreset | 'none') {
-    // 锚点用开始时间/日期，而不是"现在"：用 now 的话，"每周"会被固化到
-    // 今天所在的星期，与用户看到的任务日期不一致
-    await onPatch({ rrule: next === 'none' ? null : rruleFromPreset(next, repeatAnchor) });
+  // 切到别的任务时重新解析。三个都做成受控 state 是因为"改周几"要立刻反映到按钮上，
+  // 但它们又必须能从 task.rrule 还原 —— 直接算出来的值没法被用户改。
+  useEffect(() => {
+    const parsed = task.rrule ? parseRrule(task.rrule) : null;
+    if (!parsed) {
+      setRepeatFreq('none');
+      setRepeatDays([]);
+      setRepeatCount(null);
+      return;
+    }
+    const days = parsed.byDay ?? [];
+    const hasByMonthDay = parsed.byMonthDay !== null && parsed.byMonthDay.length > 0;
+    let freq: RepeatFreq = 'custom';
+    if (parsed.freq === 'DAILY' && days.length === 0 && !hasByMonthDay && parsed.bySetPos === null) freq = 'daily';
+    else if (parsed.freq === 'WEEKLY' && days.join(',') === 'MO,TU,WE,TH,FR' && parsed.bySetPos === null) freq = 'weekday';
+    else if (parsed.freq === 'WEEKLY' && days.length > 0 && !hasByMonthDay && parsed.bySetPos === null) freq = 'weekly';
+    else if (parsed.freq === 'MONTHLY' && parsed.bySetPos === -1 && days.join(',') === 'FR') freq = 'monthly-last-workday';
+    else if (parsed.freq === 'MONTHLY' && hasByMonthDay && days.length === 0 && parsed.bySetPos === null) freq = 'monthly';
+    else if (parsed.freq === 'YEARLY' && days.length === 0 && !hasByMonthDay && parsed.bySetPos === null) freq = 'yearly';
+    setRepeatFreq(freq);
+    setRepeatDays(days);
+    setRepeatCount(parsed.count);
+  }, [task.id, task.rrule]);
+
+  /**
+   * 重拼规则。
+   *
+   * 只在"语义参数"这一层出入口（buildRrule），不让 UI 拼字符串：
+   * BYDAY 的顺序、INTERVAL=1 写不写、UNTIL 的 UTC 格式都容易出错，
+   * 而 parseRrule 只能判断语法合法，判断不出"是不是你要的那条"。
+   */
+  async function commitRepeat(freq: RepeatFreq, days: Weekday[], count: number | null) {
+    if (freq === 'none') {
+      await onPatch({ rrule: null });
+      return;
+    }
+    if (freq === 'custom') return;
+    const anchorDate = new Date(repeatAnchor);
+    const rule = buildRrule({
+      freq: freq === 'daily' ? 'DAILY' : freq === 'monthly' || freq === 'monthly-last-workday' ? 'MONTHLY' : freq === 'yearly' ? 'YEARLY' : 'WEEKLY',
+      byDay: freq === 'weekly' ? days : freq === 'weekday' ? ['MO', 'TU', 'WE', 'TH', 'FR'] : freq === 'monthly-last-workday' ? ['FR'] : undefined,
+      bySetPos: freq === 'monthly-last-workday' ? -1 : null,
+      byMonthDay: freq === 'monthly' ? [anchorDate.getDate()] : undefined,
+      count: count && count > 0 ? count : null,
+    });
+    await onPatch({ rrule: rule });
+  }
+
+  function toggleRepeatDay(day: Weekday) {
+    const next = repeatDays.includes(day)
+      ? repeatDays.filter((d) => d !== day)
+      : [...repeatDays, day].sort((a, b) => WEEKDAYS.indexOf(a) - WEEKDAYS.indexOf(b));
+    setRepeatDays(next);
+    void commitRepeat('weekly', next, repeatCount);
   }
 
   const canNest = task.depth < MAX_DEPTH - 1;
@@ -215,20 +269,64 @@ export function Drawer({
           <select
             className={styles.control}
             aria-label="重复规则"
-            value={repeatPreset}
-            onChange={(event) => void applyRepeat(event.target.value as RrulePreset | 'none')}
+            value={repeatFreq}
+            onChange={(event) => {
+              const next = event.target.value as RepeatFreq;
+              setRepeatFreq(next);
+              // 首次切到"每周"默认勾上任务当天的星期，否则用户要多点一次才有结果
+              const days = next === 'weekly' && repeatDays.length === 0 ? [weekdayOf(new Date(repeatAnchor))] : repeatDays;
+              setRepeatDays(days);
+              void commitRepeat(next, days, repeatCount);
+            }}
           >
-            {repeatPreset === 'custom' ? (
-              <option value="custom" disabled>
-                自定义规则（保留原样）
-              </option>
-            ) : null}
             {REPEAT_OPTIONS.map((option) => (
               <option key={option.key} value={option.key}>
                 {option.label}
               </option>
             ))}
+            {repeatFreq === 'custom' ? (
+              <option value="custom" disabled>
+                自定义规则（保留原样）
+              </option>
+            ) : null}
           </select>
+
+          {repeatFreq === 'weekly' || repeatFreq === 'custom' ? (
+            <div className={styles.segments} role="group" aria-label="重复的星期">
+              {WEEKDAYS.map((day) => (
+                <button
+                  key={day}
+                  type="button"
+                  className={styles.segment}
+                  data-on={repeatDays.includes(day)}
+                  aria-pressed={repeatDays.includes(day)}
+                  onClick={() => toggleRepeatDay(day)}
+                >
+                  {WEEKDAY_CN[day]}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', marginTop: 'var(--sp-2)' }}>
+            <input
+              type="number"
+              min={0}
+              max={999}
+              className={styles.control}
+              style={{ width: 72 }}
+              value={repeatCount ?? ''}
+              placeholder="一直"
+              aria-label="重复次数，留空表示一直重复"
+              onChange={(event) => {
+                const raw = event.target.value.trim();
+                setRepeatCount(raw === '' ? null : Math.max(0, Math.min(999, Number(raw) | 0)));
+              }}
+              onBlur={() => void commitRepeat(repeatFreq, repeatDays, repeatCount)}
+            />
+            <span className={styles.hint} style={{ marginTop: 0 }}>次后停止（留空 = 一直）</span>
+          </div>
+
           <p className={styles.hint}>
             {task.rrule
               ? `规则：${task.rrule}`

@@ -64,6 +64,11 @@ export default function HabitsScreen() {
               const delta = value >= item.target ? -value : stepOf(item);
               void checkHabit(item.id, dayKey, delta);
             }}
+            onReset={() => {
+              // 长按清零。计数型点到 3/8 想全部撤销时，靠"先点够 8 次再点一下"是荒谬的，
+              // 而只给"已达标可撤销"就永远清不掉中间态
+              void checkHabit(item.id, dayKey, -valueOf(item.id));
+            }}
           />
         )}
       />
@@ -77,7 +82,7 @@ function stepOf(habit: Habit): number {
   return 1;
 }
 
-function HabitRow({ habit, value, onPress }: { habit: Habit; value: number; onPress: () => void }) {
+function HabitRow({ habit, value, onPress, onReset }: { habit: Habit; value: number; onPress: () => void; onReset: () => void }) {
   const reached = value >= habit.target;
   const unit = habitUnit(habit);
   const pct = habit.target > 0 ? Math.min(1, value / habit.target) : value > 0 ? 1 : 0;
@@ -85,10 +90,14 @@ function HabitRow({ habit, value, onPress }: { habit: Habit; value: number; onPr
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onReset}
+      delayLongPress={350}
       style={({ pressed }) => [styles.row, pressed && { backgroundColor: C.n50 }]}
       accessibilityRole="button"
       accessibilityLabel={
-        reached ? `${habit.name} 已完成，点击撤销` : `${habit.name} 进度 ${value} / ${habit.target} ${unit}，点击记录`
+        reached
+          ? `${habit.name} 已完成，点击撤销，长按清零`
+          : `${habit.name} 进度 ${value} / ${habit.target} ${unit}，点击记录，长按清零`
       }
     >
       <View style={[styles.mark, reached && styles.markDone]}>

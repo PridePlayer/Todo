@@ -199,6 +199,7 @@ export {
   parseRrule,
   formatRrule,
   rruleFromPreset,
+  buildRrule,
   toIcalDate,
   weekdayOf,
   weekdayIndex,
@@ -206,6 +207,7 @@ export {
   WEEKDAYS,
   type Freq,
   type Rule,
+  type RruleInput,
   type Weekday,
   type RrulePreset,
 } from './recurrence/rrule.js';

@@ -1,7 +1,25 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { useApp } from '../../src/store';
 import { C, FONT } from '../../src/theme';
+
+/** 每个页签一个语义图标。全部用 outline 系列，粗细才一致 */
+const TAB_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+  index: 'today-outline',
+  list: 'list-outline',
+  quadrant: 'grid-outline',
+  habits: 'checkmark-circle-outline',
+  settings: 'settings-outline',
+};
+
+const TAB_TITLE: Record<string, string> = {
+  index: '今日',
+  list: '列表',
+  quadrant: '四象限',
+  habits: '打卡',
+  settings: '设置',
+};
 
 export default function TabsLayout() {
   const { ready, auth } = useApp();
@@ -20,10 +38,10 @@ export default function TabsLayout() {
 
   return (
     <Tabs
-      screenOptions={{
+      screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: C.a500,
-        tabBarInactiveTintColor: C.n500,
+        tabBarInactiveTintColor: C.n400,
         tabBarStyle: {
           backgroundColor: C.n0,
           borderTopColor: C.n200,
@@ -33,28 +51,25 @@ export default function TabsLayout() {
           paddingTop: 6,
         },
         tabBarLabelStyle: { fontSize: FONT.xs },
-      }}
+        tabBarIcon: ({ color, size }) => (
+          // RN 的 tabBarIcon 传下来的 color 类型是 ColorValue，Ionicons 的参数是 string。
+          // 两者实际同物（都是颜色字符串），只是类型定义各写各的
+          <Ionicons name={TAB_ICON[route.name] ?? 'ellipse-outline'} size={size} color={color as string} />
+        ),
+      })}
     >
-      <Tabs.Screen
-        name="index"
-        options={{ title: '今日', tabBarLabel: ({ color }) => <Text style={{ color, fontSize: FONT.xs }}>今日</Text> }}
-      />
-      <Tabs.Screen
-        name="list"
-        options={{ title: '列表', tabBarLabel: ({ color }) => <Text style={{ color, fontSize: FONT.xs }}>列表</Text> }}
-      />
-      <Tabs.Screen
-        name="quadrant"
-        options={{ title: '四象限', tabBarLabel: ({ color }) => <Text style={{ color, fontSize: FONT.xs }}>四象限</Text> }}
-      />
-      <Tabs.Screen
-        name="habits"
-        options={{ title: '打卡', tabBarLabel: ({ color }) => <Text style={{ color, fontSize: FONT.xs }}>打卡</Text> }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{ title: '设置', tabBarLabel: ({ color }) => <Text style={{ color, fontSize: FONT.xs }}>设置</Text> }}
-      />
+      {(['index', 'list', 'quadrant', 'habits', 'settings'] as const).map((name) => (
+        <Tabs.Screen
+          key={name}
+          name={name}
+          options={{
+            title: TAB_TITLE[name],
+            tabBarLabel: ({ color }) => (
+              <Text style={{ color, fontSize: FONT.xs }}>{TAB_TITLE[name]}</Text>
+            ),
+          }}
+        />
+      ))}
     </Tabs>
   );
 }

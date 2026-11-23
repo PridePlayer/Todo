@@ -119,7 +119,12 @@ export default function ListScreen() {
         </Pressable>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tagScroll}
+        contentContainerStyle={styles.tagRow}
+      >
         <Pressable
           onPress={() => setTagFilter(null)}
           style={[styles.chip, tagFilter === null && styles.chipOn]}
@@ -232,9 +237,12 @@ const styles = StyleSheet.create({
   },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: SP[2], paddingHorizontal: SP[4], paddingTop: SP[3] },
   spacer: { flex: 1 },
-  tagRow: { gap: SP[2], paddingHorizontal: SP[4], paddingTop: SP[2], paddingBottom: SP[3] },
+  // 高度写死：横向 ScrollView 会按内容撑开，chips 高度一变整条就跳，
+  // 表现为"标签突然变高"。固定 48 与 chips 的 34 高对齐居中。
+  tagScroll: { height: 48 },
+  tagRow: { gap: SP[2], paddingHorizontal: SP[4], alignItems: 'center', height: '100%' },
   chip: {
-    minHeight: 34,
+    height: 34,
     paddingHorizontal: SP[3],
     justifyContent: 'center',
     borderWidth: 1,
