@@ -29,7 +29,10 @@ pnpm --filter @grid/web build
 pnpm --filter @grid/server build
 
 step "5/5 重启并探活"
-install -d /www/log/grid
+# 用 -o/-g 而不是再跟一条 chown：目录已存在时 chown 是幂等的，
+# 但 install -d 连带修正属主，少一条命令也少一次"改完忘了 chown"的机会。
+# 属主不对的症状是 systemctl restart 直接 failed 且日志目录里没有新文件。
+install -d -o www -g www /www/log/grid
 systemctl restart grid
 for i in $(seq 1 10); do
   if curl -fsS "http://127.0.0.1:3000/api/healthz" >/dev/null 2>&1; then break; fi
