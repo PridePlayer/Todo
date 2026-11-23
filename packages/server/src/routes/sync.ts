@@ -12,6 +12,7 @@ import { resolveSession } from '../auth/session.js';
 import type { Db, Row, SqlExecutor } from '../db/types.js';
 import type { AppEnv } from '../env.js';
 import { HttpError } from '../http/errors.js';
+import { enqueueGraphOp } from '../graph/push.js';
 import { mergeFields, normalizeHlc } from '../sync/merge.js';
 import { fieldsToColumns, isKnownField, rowToPayload, type SyncTableName } from '../sync/task-map.js';
 
@@ -20,7 +21,15 @@ interface Deps {
   env: AppEnv;
 }
 
-const TABLES: SyncTableName[] = ['task', 'tag', 'list', 'recur_exception'];
+const TABLES: SyncTableName[] = ['task', 'tag', 'list', 'recur_exception', 'calendar_source', 'cal_event'];
+
+/**
+ * 由服务端 Side 独占写入的表。
+ * 客户端可以拉、可以改其中某些字段，但**不能新建**——
+ * cal_event 的 ms_event_id / source_id 只有从 Graph 拉回来时才有意义，
+ * 让客户端建一条就等于在本地凭空造一个"不存在的会议"。
+ */
+const SERVER_OWNED: ReadonlySet<SyncTableName> = new Set<SyncTableName>(['cal_event', 'calendar_source']);
 
 const DEFAULTS: Record<SyncTableName, Record<string, unknown>> = {
   task: {
@@ -53,6 +62,29 @@ const DEFAULTS: Record<SyncTableName, Record<string, unknown>> = {
     override_title: null,
     override_payload: null,
   },
+  calendar_source: { color_key: 0, sort_order: 0, is_default: 0, is_visible: 1, is_synced: 1, can_edit: 1 },
+  cal_event: {
+    ms_event_id: '',
+    ms_ical_uid: null,
+    ms_series_master_id: null,
+    subject: '',
+    body_preview: null,
+    location: null,
+    start_at: 0,
+    end_at: 0,
+    is_all_day: 0,
+    tzid: 'Asia/Shanghai',
+    is_organizer: 0,
+    response_status: null,
+    is_recurring: 0,
+    rrule: null,
+    recurrence_raw: null,
+    web_link: null,
+    ms_etag: null,
+    sync_state: 'synced',
+    push_attempts: 0,
+    last_pushed_at: null,
+  },
 };
 
 const REQUIRED: Record<SyncTableName, string | null> = {
@@ -60,12 +92,19 @@ const REQUIRED: Record<SyncTableName, string | null> = {
   tag: 'name',
   list: 'name',
   recur_exception: 'seriesId',
+  // 服务端独占的表不允许新建，这两个值用不到
+  calendar_source: null,
+  cal_event: null,
 };
 
 /** 表名只来自白名单，绝不能从请求里拼 */
 function assertTable(name: string): SyncTableName {
   if (!TABLES.includes(name as SyncTableName)) throw new HttpError(400, 'bad_table', `不支持的同步表：${name}`);
   return name as SyncTableName;
+}
+
+function strOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
 }
 
 function buildInsert(table: SyncTableName, columns: Record<string, unknown>): { sql: string; params: unknown[] } {
@@ -210,11 +249,18 @@ export async function syncRoutes(app: FastifyInstance, deps: Deps): Promise<void
         [now, now, rev, seq, hlc.wall, hlc.counter, hlc.device, op.id, userId],
       );
       await recordOp(tx, userId, table, op, 'applied', rev, seq, now);
+      if (table === 'cal_event') {
+        // 在 Outlook 里删掉这条会议。客户端已经软删了本地行，这里只负责把意图排进队列
+        await enqueueGraphOp(tx, userId, 'delete', op.id, {}, strOrNull(row.ms_etag), now);
+      }
       return { opId: op.opId, status: 'applied', rev, seq };
     }
 
     // 2) 新建
     if (!row) {
+      if (SERVER_OWNED.has(table)) {
+        return { opId: op.opId, status: 'rejected', reason: 'server_owned_table' };
+      }
       const missing = REQUIRED[table];
       if (missing && (op.fields[missing] === undefined || op.fields[missing] === null || op.fields[missing] === '')) {
         return { opId: op.opId, status: 'rejected', reason: `missing_${missing}` };
@@ -262,7 +308,10 @@ export async function syncRoutes(app: FastifyInstance, deps: Deps): Promise<void
 
     const sanitized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(op.fields)) {
-      if (key !== 'id' && isKnownField(table, key)) sanitized[key] = value;
+      if (key === 'id' || !isKnownField(table, key)) continue;
+      // syncState 是回写队列的状态位，客户端把它设成 'synced' 就等于"骗"服务端跳过回写
+      if (table === 'cal_event' && key === 'syncState') continue;
+      sanitized[key] = value;
     }
 
     const merge = mergeFields(table, {
@@ -308,6 +357,11 @@ export async function syncRoutes(app: FastifyInstance, deps: Deps): Promise<void
     await recordOp(tx, userId, table, op, merge.conflicts.length > 0 ? 'conflict' : 'applied', rev, seq, now);
 
     const after = await tx.query<Row>(`SELECT * FROM ${table} WHERE id = ?`, [op.id]);
+
+    if (table === 'cal_event' && after[0]) {
+      await enqueueCalendarPush(tx, userId, op.id, after[0], now);
+    }
+
     return {
       opId: op.opId,
       status: merge.conflicts.length > 0 ? 'conflict' : 'applied',
@@ -316,6 +370,33 @@ export async function syncRoutes(app: FastifyInstance, deps: Deps): Promise<void
       conflicts: merge.conflicts,
       serverPayload: after[0] ? rowToPayload(table, after[0]) : null,
     };
+  }
+
+  /** 本地改了 cal_event → 标记 pending_push 并排一条 Graph 回写 */
+  async function enqueueCalendarPush(
+    tx: SqlExecutor,
+    userId: string,
+    id: string,
+    row: Row,
+    now: number,
+  ): Promise<void> {
+    await tx.query("UPDATE cal_event SET sync_state = 'pending_push', push_attempts = 0 WHERE id = ?", [id]);
+    // 整组时间一起送：只送 startAt 的话 Graph 会把 end 留在原地，
+    // 拖拽一次就变成"14:00 到原来的 10:00"，服务端还会拒绝（end <= start）
+    await enqueueGraphOp(
+      tx,
+      userId,
+      'update',
+      id,
+      {
+        subject: row.subject,
+        startAt: Number(row.start_at),
+        endAt: Number(row.end_at),
+        allDay: Number(row.is_all_day) === 1,
+      },
+      strOrNull(row.ms_etag),
+      now,
+    );
   }
 
   async function recordOp(

@@ -24,9 +24,11 @@ const COLUMNS =
   'access_token_enc, refresh_token_enc, token_expires_at, status, last_error, ' +
   'last_verified_at, created_at, updated_at';
 
-export function num(v: number | string | null): number | null {
+export function num(v: unknown): number | null {
   if (v === null || v === undefined) return null;
-  return typeof v === 'number' ? v : Number(v);
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const parsed = Number(v);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export async function findAccountByUser(db: Db, userId: string): Promise<OauthAccountRow | null> {

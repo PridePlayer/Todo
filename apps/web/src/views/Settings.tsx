@@ -2,6 +2,7 @@ import type { SessionUser } from '@grid/core';
 import { useCallback, useEffect, useState } from 'react';
 import { db } from '../db/dexie';
 import { OutlookPanel } from './OutlookPanel';
+import { SettingsCalendar } from './SettingsCalendar';
 import { SyncPanel } from './SyncPanel';
 import styles from './Settings.module.css';
 
@@ -147,6 +148,8 @@ export function Settings({ user }: SettingsProps) {
       <SyncPanel />
 
       <OutlookPanel />
+
+      <SettingsCalendar />
 
       <section className={styles.section}>
         <h2 className={styles.h2}>进度</h2>

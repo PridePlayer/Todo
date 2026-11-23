@@ -1,5 +1,7 @@
 import {
   ApiError,
+  type CalEvent,
+  type CalendarSource,
   type Quadrant,
   type RecurException,
   type SyncChange,
@@ -313,6 +315,11 @@ async function bumpRev(table: SyncTable, id: string, rev: number): Promise<void>
     if (row) await db.tasks.put({ ...row, rev });
     return;
   }
+  if (table === 'cal_event') {
+    const row = await db.events.get(id);
+    if (row) await db.events.put({ ...row, rev });
+    return;
+  }
   // tag / list 的模型里没有 rev，本地也不需要——只有 task 会带着 baseRev 做字段级合并
 }
 
@@ -360,6 +367,28 @@ async function applyPayload(
     }
     if (!payload) return;
     await db.exceptions.put(toException(id, rev, payload, deletedAt));
+    return;
+  }
+
+  if (table === 'cal_event') {
+    // 事件不物理删除：本地展开时按 deletedAt 过滤，留着墓碑才能正确显示"这条来自 Outlook 的会议被取消了"
+    const row = await db.events.get(id);
+    if (deletedAt !== null) {
+      if (row) await db.events.put({ ...row, deletedAt, rev });
+      return;
+    }
+    if (!payload) return;
+    await db.events.put(toCalEvent(id, rev, payload, deletedAt));
+    return;
+  }
+
+  if (table === 'calendar_source') {
+    if (deletedAt !== null) {
+      await db.sources.delete(id);
+      return;
+    }
+    if (!payload) return;
+    await db.sources.put(toSource(id, rev, payload));
     return;
   }
 
@@ -421,6 +450,55 @@ function toTask(id: string, rev: number, payload: Record<string, unknown>): Task
   };
 }
 
+/** 线上 payload → 本地 CalEvent。逐字段兜底，理由同 toTask */
+function toCalEvent(id: string, rev: number, payload: Record<string, unknown>, deletedAt: number | null): CalEvent {
+  const now = Date.now();
+  const startAt = numOrNull(payload.startAt) ?? now;
+  const endAt = numOrNull(payload.endAt) ?? startAt + 60 * 60 * 1000;
+  return {
+    id,
+    sourceId: str(payload.sourceId) ?? '',
+    msEventId: str(payload.msEventId) ?? '',
+    subject: (str(payload.subject) ?? '(无标题)').slice(0, 512),
+    bodyPreview: str(payload.bodyPreview),
+    location: str(payload.location),
+    startAt,
+    endAt: endAt > startAt ? endAt : startAt + 60 * 60 * 1000,
+    allDay: Boolean(payload.allDay),
+    tzid: str(payload.tzid) ?? 'Asia/Shanghai',
+    isOrganizer: Boolean(payload.isOrganizer),
+    responseStatus: str(payload.responseStatus),
+    isRecurring: Boolean(payload.isRecurring),
+    rrule: str(payload.rrule),
+    webLink: str(payload.webLink),
+    syncState:
+      payload.syncState === 'pending_push' || payload.syncState === 'failed' || payload.syncState === 'readonly'
+        ? payload.syncState
+        : 'synced',
+    createdAt: numOrNull(payload.createdAt) ?? now,
+    updatedAt: numOrNull(payload.updatedAt) ?? now,
+    deletedAt,
+    rev: rev > 0 ? rev : 1,
+  };
+}
+
+function toSource(id: string, rev: number, payload: Record<string, unknown>): CalendarSource {
+  const now = Date.now();
+  return {
+    id,
+    name: (str(payload.name) ?? '未命名日历').slice(0, 128),
+    isVisible: payload.isVisible === undefined ? true : Boolean(payload.isVisible),
+    isSynced: payload.isSynced === undefined ? true : Boolean(payload.isSynced),
+    canEdit: Boolean(payload.canEdit),
+    isDefault: Boolean(payload.isDefault),
+    colorKey: clampColor(Number(payload.colorKey ?? 0)),
+    sortOrder: Number(payload.sortOrder ?? 0) || 0,
+    updatedAt: numOrNull(payload.updatedAt) ?? now,
+    deletedAt: numOrNull(payload.deletedAt),
+    rev: rev > 0 ? rev : 1,
+  };
+}
+
 function str(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
 }function numOrNull(value: unknown): number | null {
@@ -458,11 +536,14 @@ function toException(id: string, rev: number, payload: Record<string, unknown>, 
 // ── 人工操作 ────────────────────────────────────────────────
 
 async function clearLocalData(): Promise<void> {
-  await db.transaction('rw', db.tasks, db.tags, db.lists, db.exceptions, async () => {
+  // 表超过 5 张时用数组形式：Dexie 的位置参数重载最多 5 张表 + 回调
+  await db.transaction('rw', [db.tasks, db.tags, db.lists, db.exceptions, db.events, db.sources], async () => {
     await db.tasks.clear();
     await db.tags.clear();
     await db.lists.clear();
     await db.exceptions.clear();
+    await db.events.clear();
+    await db.sources.clear();
   });
 }
 

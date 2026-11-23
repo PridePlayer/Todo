@@ -17,7 +17,12 @@ const DAY = 24 * 60 * 60 * 1000;
 
 interface EventEditorProps {
   occurrence: Occurrence;
+  /** 待办系列的母体；Outlook 事件没有这个（它的母体在服务端） */
   series: Task | null;
+  /** 只读：Outlook 重复事件、只读日历上的事件 */
+  readOnly?: boolean;
+  /** Graph 给的 webLink：只读时唯一的出口是"去 Outlook 改" */
+  webLink?: string | null;
   onApply: (patch: OccurrencePatch, scope: EditScope | null) => Promise<void>;
   onSkip: () => void;
   onClose: () => void;
@@ -35,7 +40,15 @@ function timeInput(ts: number): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function EventEditor({ occurrence, series, onApply, onSkip, onClose }: EventEditorProps) {
+export function EventEditor({
+  occurrence,
+  series,
+  readOnly = false,
+  webLink = null,
+  onApply,
+  onSkip,
+  onClose,
+}: EventEditorProps) {
   const [title, setTitle] = useState(occurrence.title);
   const [date, setDate] = useState(dateInput(occurrence.start));
   const [start, setStart] = useState(timeInput(occurrence.start));
@@ -43,6 +56,7 @@ export function EventEditor({ occurrence, series, onApply, onSkip, onClose }: Ev
   const [askScope, setAskScope] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const isEvent = occurrence.kind === 'event';
   const recurring = series?.rrule !== null && series?.rrule !== undefined;
   const duration = occurrence.end - occurrence.start;
 
@@ -102,33 +116,55 @@ export function EventEditor({ occurrence, series, onApply, onSkip, onClose }: Ev
         onClick={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault();
+          if (readOnly) return;
           if (recurring) setAskScope(true);
           else void save(null);
         }}
       >
-        <p className="eyebrow">{recurring ? '重复任务的一次' : '任务'}</p>
+        <p className="eyebrow">
+          {isEvent ? (readOnly ? 'Outlook 日程 · 只读' : 'Outlook 日程') : recurring ? '重复任务的一次' : '任务'}
+        </p>
         <label className={editor.field}>
           <span className={editor.label}>标题</span>
           <input
             className={editor.input}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            autoFocus
+            readOnly={readOnly}
+            autoFocus={!readOnly}
           />
         </label>
 
         <div className={editor.row}>
           <label className={editor.field}>
             <span className={editor.label}>日期</span>
-            <input className={editor.input} type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+            <input
+              className={editor.input}
+              type="date"
+              value={date}
+              readOnly={readOnly}
+              onChange={(event) => setDate(event.target.value)}
+            />
           </label>
           <label className={editor.field}>
             <span className={editor.label}>开始</span>
-            <input className={editor.input} type="time" value={start} onChange={(event) => setStart(event.target.value)} />
+            <input
+              className={editor.input}
+              type="time"
+              value={start}
+              readOnly={readOnly}
+              onChange={(event) => setStart(event.target.value)}
+            />
           </label>
           <label className={editor.field}>
             <span className={editor.label}>结束</span>
-            <input className={editor.input} type="time" value={end} onChange={(event) => setEnd(event.target.value)} />
+            <input
+              className={editor.input}
+              type="time"
+              value={end}
+              readOnly={readOnly}
+              onChange={(event) => setEnd(event.target.value)}
+            />
           </label>
         </div>
 
@@ -139,27 +175,51 @@ export function EventEditor({ occurrence, series, onApply, onSkip, onClose }: Ev
         ) : null}
 
         <div className={editor.actions}>
-          <button type="submit" className={styles.addBtn} disabled={busy}>
-            {busy ? '保存中…' : '保存'}
-          </button>
-          <button
-            type="button"
-            className={editor.del}
-            onClick={() => {
-              onSkip();
-            }}
-          >
-            {recurring ? '只删这一次' : '删除'}
-          </button>
+          {readOnly ? (
+            <button
+              type="button"
+              className={styles.addBtn}
+              disabled={webLink === null}
+              title={webLink === null ? '这条事件没有可打开的链接' : '在浏览器里打开 Outlook 网页版'}
+              onClick={() => {
+                if (webLink) window.open(webLink, '_blank', 'noopener,noreferrer');
+              }}
+            >
+              在 Outlook 中修改
+            </button>
+          ) : (
+            <button type="submit" className={styles.addBtn} disabled={busy}>
+              {busy ? '保存中…' : '保存'}
+            </button>
+          )}
+          {readOnly ? null : (
+            <button
+              type="button"
+              className={editor.del}
+              onClick={() => {
+                onSkip();
+              }}
+            >
+              {recurring ? '只删这一次' : '删除'}
+            </button>
+          )}
           <button type="button" className={editor.cancel} onClick={onClose}>
-            取消
+            关闭
           </button>
         </div>
 
-        {recurring ? (
+        {readOnly ? (
+          <p className={editor.note}>
+            {isEvent
+              ? '重复会议的每一次由 Outlook 决定，GRID 只做展示。要改时间或标题请点上面的按钮。'
+              : '这个日历是只读的（节假日/生日），事件只能在 Outlook 里改。'}
+          </p>
+        ) : recurring ? (
           <p className={editor.note}>
             这是 <span className={editor.mono}>{series?.title}</span> 的一次实例，保存后会问你要改哪些。
           </p>
+        ) : isEvent ? (
+          <p className={editor.note}>保存后会在几秒内回写到 Outlook。</p>
         ) : null}
       </form>
 

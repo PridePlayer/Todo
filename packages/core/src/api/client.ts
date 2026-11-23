@@ -8,6 +8,12 @@ import {
   type SessionResponse,
 } from '../models/session.js';
 import {
+  calendarStatusSchema,
+  calendarSyncResultSchema,
+  type CalendarStatus,
+  type CalendarSyncResult,
+} from '../models/calendar.js';
+import {
   syncPullResponseSchema,
   syncPushResponseSchema,
   type SyncPullResponse,
@@ -58,6 +64,14 @@ export interface ApiClient {
   syncPush(body: SyncPushRequest): Promise<SyncPushResponse>;
   /** 服务端水位与条数，设置页用来对照"两边是不是真的收敛了" */
   syncState(): Promise<SyncServerState>;
+  /** Outlook 日历的同步状态（连接、最近同步、日历源开关） */
+  calendarStatus(): Promise<CalendarStatus>;
+  /** 立即拉一次 Outlook 增量。日历页打开时每 30 秒调一次 */
+  calendarSync(): Promise<CalendarSyncResult>;
+  /** 单个日历源的显示/同步开关 */
+  calendarPatchSource(id: string, patch: { isVisible?: boolean; isSynced?: boolean }): Promise<void>;
+  /** 重新发现日历列表（用户新建/删除了日历） */
+  calendarRefreshSources(): Promise<{ sources: { id: string; name: string; isVisible: boolean; isSynced: boolean; canEdit: boolean }[] }>;
   /** 当前持有的 CSRF token（调试用） */
   currentCsrfToken(): string | null;
 }
@@ -195,6 +209,39 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
     async syncState() {
       return request('/sync/state', { parse: syncStateSchema });
+    },
+
+    async calendarStatus() {
+      return request('/calendar/status', { parse: calendarStatusSchema });
+    },
+
+    async calendarSync() {
+      return request('/calendar/sync', { method: 'POST', parse: calendarSyncResultSchema });
+    },
+
+    async calendarPatchSource(id, patch) {
+      await request(`/calendar/sources/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+        parse: z.object({ ok: z.boolean(), isVisible: z.boolean(), isSynced: z.boolean() }),
+      });
+    },
+
+    async calendarRefreshSources() {
+      return request('/calendar/sources/refresh', {
+        method: 'POST',
+        parse: z.object({
+          sources: z.array(
+            z.object({
+              id: z.string(),
+              name: z.string(),
+              isVisible: z.boolean(),
+              isSynced: z.boolean(),
+              canEdit: z.boolean(),
+            }),
+          ),
+        }),
+      });
     },
 
     currentCsrfToken() {

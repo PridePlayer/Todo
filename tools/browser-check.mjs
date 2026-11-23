@@ -455,6 +455,110 @@ try {
   `);
   check('改完开始时间后仍是 1 小时，没有被撑成跨天', blockHeight === '56px', blockHeight || '未找到块');
 
+  // 14) Outlook 日历：事件进周视图、重复事件只读、单次事件拖动后回写
+  await page.evaluate(`
+    [...document.querySelectorAll('button')].find(b => b.textContent.trim() === '日历')?.click();
+    return true;
+  `);
+  await page.waitUntil("document.body.innerText.includes('M4 单次会议')", 25000, 'Outlook 事件出现在周视图');
+  const outlook = await page.evaluate(`
+    const blocks = [...document.querySelectorAll('[data-kind]')];
+    const events = blocks.filter(el => el.getAttribute('data-kind') === 'event');
+    const tasks = blocks.filter(el => el.getAttribute('data-kind') === 'task');
+    const banner = [...document.querySelectorAll('[class*="bar"]')].map(el => el.textContent).join(' | ');
+    return {
+      events: events.length,
+      tasks: tasks.length,
+      banner,
+      hasEmail: banner.includes('@'),
+    };
+  `);
+  check('周视图里出现了 data-kind=event 的块', outlook.events >= 2, `${outlook.events} 个事件块`);
+  check('待办块仍然是 data-kind=task（描边/实心的语义没混）', outlook.tasks >= 0, `${outlook.tasks} 个待办块`);
+  check('日历顶部显示 Outlook 状态条与邮箱', outlook.hasEmail === true, String(outlook.banner).slice(0, 60));
+
+  // 重复事件：只读 + 「在 Outlook 中修改」
+  const readonly = await page.evaluate(`
+    const el = [...document.querySelectorAll('[data-kind="event"]')]
+      .find(node => node.textContent?.includes('M4 每周例会'));
+    if (!el) return 'no-block';
+    el.click();
+    await new Promise(r => setTimeout(r, 400));
+    const dialog = document.querySelector('form[role="dialog"]');
+    if (!dialog) return 'no-dialog';
+    const buttons = [...dialog.querySelectorAll('button')].map(b => b.textContent.trim());
+    const inputs = [...dialog.querySelectorAll('input')];
+    return {
+      readonly: inputs.every(i => i.readOnly),
+      hasOutlookButton: buttons.includes('在 Outlook 中修改'),
+      hasSave: buttons.includes('保存'),
+      note: dialog.textContent.includes('由 Outlook 决定'),
+    };
+  `);
+  check(
+    '重复事件打开后是只读的，且只有「在 Outlook 中修改」这一个出口',
+    typeof readonly === 'object' &&
+      readonly.readonly === true &&
+      readonly.hasOutlookButton === true &&
+      readonly.hasSave === false,
+    JSON.stringify(readonly),
+  );
+  check('只读时给出原因说明', typeof readonly === 'object' && readonly.note === true);
+
+  await page.evaluate(`
+    [...document.querySelectorAll('form[role="dialog"] button')].find(b => b.textContent.trim() === '关闭')?.click();
+    return true;
+  `);
+  await new Promise((r) => setTimeout(r, 300));
+
+  // 单次事件拖动 +1 小时 → 回写队列必须把它推上去
+  const beforeDrag = await page.evaluate(`
+    const el = [...document.querySelectorAll('[data-kind="event"]')]
+      .find(node => node.textContent?.includes('M4 单次会议'));
+    if (!el) return null;
+    // 先滚进可视区：16:00 的块默认在折叠线以下，用视口外的坐标点等于点在空气上
+    el.scrollIntoView({ block: 'center' });
+    await new Promise(r => setTimeout(r, 300));
+    const rect = el.getBoundingClientRect();
+    return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + 8), text: el.textContent, rect: [Math.round(rect.top), Math.round(rect.height)] };
+  `);
+  if (beforeDrag) {
+    const cdpDrag = async (x, y) => {
+      await page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
+      // 分几步移动，更像真实拖动：一步到位会被浏览器合并成一次 pointermove
+      for (const step of [0.4, 0.8, 1]) {
+        await page.send('Input.dispatchMouseEvent', {
+          type: 'mouseMoved',
+          x,
+          y: Math.round(y + 56 * step),
+          button: 'left',
+        });
+        await new Promise((r) => setTimeout(r, 40));
+      }
+      await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y: y + 56, button: 'left', clickCount: 1 });
+    };
+    await cdpDrag(beforeDrag.x, beforeDrag.y);
+    await new Promise((r) => setTimeout(r, 2500));
+    const afterDrag = await page.evaluate(`
+      const el = [...document.querySelectorAll('[data-kind="event"]')]
+        .find(node => node.textContent?.includes('M4 单次会议'));
+      return el ? el.textContent : null;
+    `);
+    const dialogOpen = await page.evaluate(`return Boolean(document.querySelector('form[role="dialog"]'));`);
+    // 期望值按"拖动前的时间 +1 小时"算，不写死 17:00：
+    // 同一份夹具会被反复用，第二次跑时它已经在 17:00 了
+    const m = /(\d{2}):(\d{2})/.exec(beforeDrag.text);
+    const expected = m ? `${String((Number(m[1]) + 1) % 24).padStart(2, '0')}:${m[2]}` : '?';
+    check(
+      '拖动单次事件后时间 +1 小时',
+      typeof afterDrag === 'string' && afterDrag.includes(expected),
+      `期望 ${expected}，实际 ${String(afterDrag)}`,
+    );
+    check('拖完不会顺手弹出编辑器', dialogOpen === false, dialogOpen ? '弹出了编辑器' : '');
+  } else {
+    check('单次事件块存在', false, '未找到 M4 单次会议');
+  }
+
   // 截图：只在 SHOT=1 时保存，用来目视检查排版（自动化断言抓不到"难看"）
   if (process.env.SHOT === '1') {
     // 用桌面尺寸截图：默认窗口是 750x450，会自动落进移动端布局，看不出桌面排版

@@ -53,6 +53,8 @@ export function AgendaView({ from, to, occurrences, onOpen, onSkip }: AgendaView
           <div className={styles.aRows}>
             {group.list.map((occurrence) => {
               const recurring = occurrence.originalStart !== occurrence.start || occurrence.exceptionId !== null;
+              const isEvent = occurrence.kind === 'event';
+              const readOnly = occurrence.origin?.readOnly === true;
               return (
                 <div
                   key={`${occurrence.seriesId}-${occurrence.originalStart}`}
@@ -71,18 +73,25 @@ export function AgendaView({ from, to, occurrences, onOpen, onSkip }: AgendaView
                   </span>
                   <span className={styles.aTitle}>{occurrence.title}</span>
                   {recurring ? <span className={styles.aTag}>已改</span> : null}
-                  <button
-                    type="button"
-                    className={styles.aDel}
-                    aria-label={`删除「${occurrence.title}」这一次`}
-                    title="只删这一次"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onSkip(occurrence);
-                    }}
-                  >
-                    ×
-                  </button>
+                  {isEvent ? (
+                    // Outlook 事件的删除只能在 Outlook 里做（P0 不做重复/单次删除的回写）
+                    <span className={styles.aTag} title="来自 Outlook">
+                      Outlook{readOnly ? ' · 只读' : ''}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.aDel}
+                      aria-label={`删除「${occurrence.title}」这一次`}
+                      title="只删这一次"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSkip(occurrence);
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               );
             })}

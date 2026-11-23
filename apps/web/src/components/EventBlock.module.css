@@ -39,6 +39,36 @@
   padding: 1px 4px;
 }
 
+/*
+ * 待办：描边。与四象限列表里的行保持同一套语言——
+ * 在日历上看到一个实心块就知道"这不是待办，是别人的日程"。
+ */
+.block[data-kind='task'] {
+  background: var(--n-0);
+  color: var(--n-900);
+  border: 1px solid var(--a-500);
+  border-left-width: 3px;
+}
+
+.block[data-kind='task']:hover {
+  background: var(--a-100);
+}
+
+.block[data-kind='task'] .time {
+  color: var(--n-500);
+  opacity: 1;
+}
+
+/* 只读：不能拖，光标也要说出来 */
+.block[data-readonly='true'] {
+  cursor: pointer;
+  background: var(--a-600);
+}
+
+.block[data-readonly='true']:hover {
+  background: var(--a-700);
+}
+
 .time {
   font-family: var(--font-mono);
   font-size: 10px;

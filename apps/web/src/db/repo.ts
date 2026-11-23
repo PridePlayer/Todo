@@ -107,6 +107,7 @@ async function enqueueUpdate(
   fields: Record<string, unknown>,
   base: Record<string, unknown> | null,
   baseRev: number,
+  table: SyncTable = 'task',
 ): Promise<void> {
   const pending = await pendingFor(id);
   const createOp = pending.find((op) => op.action === 'create');
@@ -131,7 +132,26 @@ async function enqueueUpdate(
     notifyLocalChange();
     return;
   }
-  await pushOp({ table: 'task', action: 'update', id, baseRev, fields, base });
+  await pushOp({ table, action: 'update', id, baseRev, fields, base });
+}
+
+/**
+ * 通用入队：给 task 之外的实体（cal_event）用。
+ * task 的合并规则（四象限、tagIds）不适用于别的表，但它们共用"同一条只留一条 op"的逻辑。
+ */
+export async function enqueueTableUpdate(
+  table: SyncTable,
+  id: string,
+  fields: Record<string, unknown>,
+  base: Record<string, unknown>,
+  baseRev: number,
+): Promise<void> {
+  await enqueueUpdate(id, fields, base, baseRev, table);
+}
+
+/** 通用软删入队 */
+export async function enqueueTableDelete(table: SyncTable, id: string, baseRev: number): Promise<void> {
+  await pushOp({ table, action: 'delete', id, baseRev, fields: {}, base: null });
 }
 
 /**

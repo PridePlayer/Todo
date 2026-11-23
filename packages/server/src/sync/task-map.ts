@@ -73,11 +73,56 @@ const EXCEPTION_FIELDS: Record<string, FieldSpec> = {
   rev: { col: 'rev', kind: 'raw' },
 };
 
+const SOURCE_FIELDS: Record<string, FieldSpec> = {
+  id: { col: 'id', kind: 'raw' },
+  name: { col: 'name', kind: 'raw' },
+  isVisible: { col: 'is_visible', kind: 'bool' },
+  isSynced: { col: 'is_synced', kind: 'bool' },
+  canEdit: { col: 'can_edit', kind: 'bool' },
+  isDefault: { col: 'is_default', kind: 'bool' },
+  colorKey: { col: 'color_key', kind: 'raw' },
+  sortOrder: { col: 'sort_order', kind: 'raw' },
+  updatedAt: { col: 'updated_at', kind: 'raw' },
+  deletedAt: { col: 'deleted_at', kind: 'raw' },
+  rev: { col: 'rev', kind: 'raw' },
+};
+
+/**
+ * Outlook 事件镜像。
+ *
+ * 注意这里**没有** msEtag / sourceId 的写入通道之外的字段：
+ *   - msEtag 只在服务端与 Graph 之间流转，客户端拿到也没用，写进来只会破坏 If-Match
+ *   - msEventId 由服务端从 Graph 写入，客户端改它等于把事件指向另一个会议
+ */
+const CAL_EVENT_FIELDS: Record<string, FieldSpec> = {
+  id: { col: 'id', kind: 'raw' },
+  sourceId: { col: 'source_id', kind: 'raw' },
+  subject: { col: 'subject', kind: 'raw' },
+  bodyPreview: { col: 'body_preview', kind: 'raw' },
+  location: { col: 'location', kind: 'raw' },
+  startAt: { col: 'start_at', kind: 'raw' },
+  endAt: { col: 'end_at', kind: 'raw' },
+  allDay: { col: 'is_all_day', kind: 'bool' },
+  tzid: { col: 'tzid', kind: 'raw' },
+  isOrganizer: { col: 'is_organizer', kind: 'bool' },
+  responseStatus: { col: 'response_status', kind: 'raw' },
+  isRecurring: { col: 'is_recurring', kind: 'bool' },
+  rrule: { col: 'rrule', kind: 'raw' },
+  webLink: { col: 'web_link', kind: 'raw' },
+  syncState: { col: 'sync_state', kind: 'raw' },
+  createdAt: { col: 'created_at', kind: 'raw' },
+  updatedAt: { col: 'updated_at', kind: 'raw' },
+  deletedAt: { col: 'deleted_at', kind: 'raw' },
+  rev: { col: 'rev', kind: 'raw' },
+};
+
 export const FIELD_MAPS = {
   task: TASK_FIELDS,
   tag: TAG_FIELDS,
   list: LIST_FIELDS,
   recur_exception: EXCEPTION_FIELDS,
+  calendar_source: SOURCE_FIELDS,
+  cal_event: CAL_EVENT_FIELDS,
 } as const;
 
 export type SyncTableName = keyof typeof FIELD_MAPS;

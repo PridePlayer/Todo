@@ -8,6 +8,8 @@ import {
 } from '@grid/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RangeChoice, type EditScope } from '../../components/RangeChoice';
+import { SyncBanner } from '../../components/SyncBanner';
+import { deleteCalEvent, patchCalEvent } from '../../db/cal';
 import { repo } from '../../db/repo';
 import { useOccurrences } from '../../hooks/useOccurrences';
 import { useTasks } from '../../hooks/useStore';
@@ -63,6 +65,13 @@ export function CalendarView() {
   /** 拖拽/拉伸的落点：是否重复决定是直接改，还是先问范围 */
   const applyOccurrence = useCallback(
     (occurrence: Occurrence, patch: OccurrencePatch) => {
+      // Outlook 事件：直接改本地并发回写，没有"改哪几次"的问题——
+      // 重复事件在 UI 上是只读的，能拖的一定是单次事件
+      if (occurrence.kind === 'event') {
+        if (occurrence.origin?.readOnly) return;
+        void patchCalEvent(occurrence.seriesId, patch);
+        return;
+      }
       const series = seriesOf(occurrence);
       if (!series) return;
       if (series.rrule === null) {
@@ -148,6 +157,8 @@ export function CalendarView() {
         </div>
       </header>
 
+      <SyncBanner />
+
       <NewEventBar anchor={anchor} onCreated={(day) => setAnchor(day)} />
 
       {loading ? <p className={styles.empty}>正在展开重复规则…</p> : null}
@@ -186,6 +197,10 @@ export function CalendarView() {
           occurrences={occurrences}
           onOpen={setEditing}
           onSkip={(occurrence) => {
+            if (occurrence.kind === 'event') {
+              if (!occurrence.origin?.readOnly) void deleteCalEvent(occurrence.seriesId);
+              return;
+            }
             const series = seriesOf(occurrence);
             if (!series) return;
             if (series.rrule === null) void repo.softDelete(series.id);
@@ -198,9 +213,15 @@ export function CalendarView() {
         <EventEditor
           occurrence={editing}
           series={seriesOf(editing)}
+          readOnly={editing.origin?.readOnly === true}
+          webLink={editing.origin?.webLink ?? null}
           onClose={() => setEditing(null)}
           onApply={async (patch, scope) => {
             setEditing(null);
+            if (editing.kind === 'event') {
+              await patchCalEvent(editing.seriesId, patch);
+              return;
+            }
             // scope 为 null = 这条本来就不重复，直接改母体
             if (!scope) {
               await repo.patch(editing.seriesId, patch);
@@ -212,6 +233,11 @@ export function CalendarView() {
           onSkip={() => {
             const target = editing;
             setEditing(null);
+            if (target.kind === 'event') {
+              // 删的是 Outlook 侧的会议，几秒后由回写队列落到 Graph
+              if (!target.origin?.readOnly) void deleteCalEvent(target.seriesId);
+              return;
+            }
             const series = seriesOf(target);
             if (!series) return;
             if (series.rrule === null) void repo.softDelete(series.id);

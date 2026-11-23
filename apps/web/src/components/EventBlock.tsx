@@ -27,12 +27,28 @@ export function EventBlock({ block, onMove, onResize, onOpen, compact = false }:
   const [dy, setDy] = useState(0);
   const [mode, setMode] = useState<'idle' | 'move' | 'resize'>('idle');
   const drag = useRef<{ startY: number; pointerId: number } | null>(null);
+  /**
+   * 位移的 ref 副本。
+   *
+   * 指针抬起时读 `dy` 是不安全的：React 的 setState 是异步的，
+   * 一次快速拖动（move 与 up 落在同一帧内）会让 end() 里的 dy 还停在 0，
+   * 于是"拖动"被当成"点击"，事件原地弹开编辑器。ref 是同步写入的，不受渲染节拍影响。
+   */
+  const lastDy = useRef(0);
+  /** 这一轮指针交互到底算不算拖动。拖动结束后浏览器仍会补一个 click，
+   *  不过滤掉的话"拖完自动弹出编辑器"，每次改时间都要多点一次关闭 */
+  const dragged = useRef(false);
 
   const occurrence = block.occurrence;
+  // 只读实例（Outlook 重复事件、只读日历上的事件）连"拖起来"都不该发生：
+  // 拖动过程里块会跟手移动，松手才失败，那种"动了又弹回去"比完全不能拖更让人困惑
+  const readOnly = occurrence.origin?.readOnly === true;
 
   function begin(event: ReactPointerEvent<HTMLElement>, next: 'move' | 'resize'): void {
     // 只用主键：右键与中键不该拖动
     if (event.button !== 0) return;
+    if (readOnly) return;
+    dragged.current = false;
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
     drag.current = { startY: event.clientY, pointerId: event.pointerId };
@@ -41,22 +57,26 @@ export function EventBlock({ block, onMove, onResize, onOpen, compact = false }:
 
   function move(event: ReactPointerEvent<HTMLElement>): void {
     if (!drag.current || drag.current.pointerId !== event.pointerId) return;
-    setDy(event.clientY - drag.current.startY);
+    const next = event.clientY - drag.current.startY;
+    lastDy.current = next;
+    setDy(next);
   }
 
   function end(event: ReactPointerEvent<HTMLElement>): void {
     if (!drag.current || drag.current.pointerId !== event.pointerId) return;
-    const delta = dy;
+    const delta = lastDy.current;
     const fine = event.altKey;
     drag.current = null;
     setMode('idle');
     setDy(0);
+    lastDy.current = 0;
 
     const msPerPixel = (60 * 60 * 1000) / HOUR_H;
     const rawMs = delta * msPerPixel;
     const size = fine ? 15 * 60 * 1000 : 30 * 60 * 1000;
     const snapped = Math.round(rawMs / size) * size;
 
+    if (snapped !== 0) dragged.current = true;
     if (mode === 'resize') {
       if (snapped !== 0) onResize(occurrence, snapped);
     } else if (snapped !== 0) {
@@ -81,16 +101,24 @@ export function EventBlock({ block, onMove, onResize, onOpen, compact = false }:
       style={style}
       data-mode={mode}
       data-compact={compact}
+      data-kind={occurrence.kind}
+      data-readonly={readOnly}
       data-recurring={occurrence.exceptionId !== null || occurrence.originalStart !== occurrence.start}
       role="button"
       tabIndex={0}
-      title={`${occurrence.title} ${formatClock(occurrence.start)}–${formatClock(occurrence.end)}`}
+      title={`${occurrence.title} ${formatClock(occurrence.start)}–${formatClock(occurrence.end)}${
+        readOnly ? '（只读，点击查看）' : ''
+      }`}
       onPointerDown={(event) => begin(event, 'move')}
       onPointerMove={move}
       onPointerUp={end}
       onPointerCancel={end}
       onClick={(event) => {
         event.stopPropagation();
+        if (dragged.current) {
+          dragged.current = false;
+          return;
+        }
         onOpen(occurrence);
       }}
       onKeyDown={(event) => {
@@ -104,13 +132,15 @@ export function EventBlock({ block, onMove, onResize, onOpen, compact = false }:
         {block.clippedTop ? '…' : formatClock(occurrence.start)}
       </span>
       <span className={styles.title}>{occurrence.title}</span>
-      <span
-        className={styles.resize}
-        aria-hidden="true"
-        onPointerDown={(event) => begin(event, 'resize')}
-        onPointerMove={move}
-        onPointerUp={end}
-      />
+      {readOnly ? null : (
+        <span
+          className={styles.resize}
+          aria-hidden="true"
+          onPointerDown={(event) => begin(event, 'resize')}
+          onPointerMove={move}
+          onPointerUp={end}
+        />
+      )}
     </div>
   );
 }

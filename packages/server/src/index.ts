@@ -1,13 +1,16 @@
 import { buildApp } from './app.js';
 import { createDb, runMigrations } from './db/index.js';
 import { loadEnv } from './env.js';
+import { createGraphContext } from './graph/context.js';
+import { startCalendarJobs } from './jobs/calendar.js';
 
 async function main(): Promise<void> {
   const startedAt = Date.now();
   const env = loadEnv();
   const db = createDb(env.dbUrl);
 
-  const app = await buildApp({ env, db, startedAt });
+  const graph = createGraphContext(db, env);
+  const app = await buildApp({ env, db, startedAt, tokens: graph?.tokens ?? null });
 
   const reachable = await db.ping();
   if (!reachable) {
@@ -25,6 +28,9 @@ async function main(): Promise<void> {
 
   await app.listen({ host: env.host, port: env.port });
 
+  // 日历后台任务：拉增量 + 回写队列。未配置 OAuth 时 startCalendarJobs 是空实现
+  const stopJobs = graph ? startCalendarJobs({ db, env, tokens: graph.tokens }) : () => undefined;
+
   app.log.info(
     {
       version: '0.1.0',
@@ -39,6 +45,7 @@ async function main(): Promise<void> {
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, '收到退出信号，开始收尾');
+    stopJobs();
     try {
       await app.close();
       await db.close();

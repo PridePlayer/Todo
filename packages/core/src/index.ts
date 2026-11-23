@@ -115,6 +115,29 @@ export {
 } from './models/recur-exception.js';
 
 export {
+  CAL_SYNC_STATES,
+  calEventSchema,
+  calendarSourceSchema,
+  calendarStatusSchema,
+  calendarSyncResultSchema,
+  calendarSourceOptionSchema,
+  type CalEvent,
+  type CalSyncState,
+  type CalendarSource,
+  type CalendarStatus,
+  type CalendarSyncResult,
+  type CalendarSourceOption,
+} from './models/calendar.js';
+
+export {
+  systemTimeZone,
+  toIanaTimeZone,
+  parseZonedDateTime,
+  formatZonedDateTime,
+  dateKeyInZone,
+} from './time.js';
+
+export {
   parseRrule,
   formatRrule,
   rruleFromPreset,
@@ -135,6 +158,8 @@ export {
   rawStarts,
   durationOf,
   type Occurrence,
+  type OccurrenceKind,
+  type OccurrenceOrigin,
   type SeriesLike,
   type RecurExceptionLike,
   type ExceptionKind,

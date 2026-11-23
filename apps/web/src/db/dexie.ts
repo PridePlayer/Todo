@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { RecurException, SyncTable, Tag, Task, TaskList } from '@grid/core';
+import type { CalEvent, CalendarSource, RecurException, SyncTable, Tag, Task, TaskList } from '@grid/core';
 
 /**
  * 本地操作队列的一条记录。
@@ -63,6 +63,8 @@ export class GridDB extends Dexie {
   meta!: Table<MetaRow, string>;
   conflicts!: Table<ConflictRow, string>;
   exceptions!: Table<RecurException, string>;
+  events!: Table<CalEvent, string>;
+  sources!: Table<CalendarSource, string>;
 
   constructor() {
     super('grid');
@@ -90,6 +92,19 @@ export class GridDB extends Dexie {
       conflicts: 'id, taskId, createdAt',
       exceptions: 'id, seriesId, originalStart, kind, deletedAt',
     });
+    // v4：Outlook 镜像。events 按 startAt 建索引：日历只展开当前窗口，
+    // 有索引就不必把上千条历史会议读进内存再过滤
+    this.version(4).stores({
+      tasks: 'id, parentId, quadrant, completedAt, dueDate, path, sortOrder, deletedAt, listId',
+      tags: 'id, &name',
+      lists: 'id, sortOrder',
+      outbox: 'opId, status, createdAt, id',
+      meta: 'key',
+      conflicts: 'id, taskId, createdAt',
+      exceptions: 'id, seriesId, originalStart, kind, deletedAt',
+      events: 'id, sourceId, startAt, endAt, deletedAt',
+      sources: 'id, sortOrder, deletedAt',
+    });
     this.tasks = this.table('tasks');
     this.tags = this.table('tags');
     this.lists = this.table('lists');
@@ -97,6 +112,8 @@ export class GridDB extends Dexie {
     this.meta = this.table('meta');
     this.conflicts = this.table('conflicts');
     this.exceptions = this.table('exceptions');
+    this.events = this.table('events');
+    this.sources = this.table('sources');
   }
 }
 

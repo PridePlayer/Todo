@@ -33,6 +33,26 @@ export interface RecurExceptionLike {
   deletedAt: number | null;
 }
 
+/**
+ * 实例的来源。
+ *
+ * 同一个日历网格里混着两类东西：本地待办（task）与 Outlook 镜像事件（cal_event）。
+ * 两者的编辑语义完全不同——待办可以随便拖，Outlook 的重复事件只能跳过去改——
+ * 所以来源必须跟着实例一路传下去，不能在上层靠 id 反查（反查会在渲染时才失败）。
+ */
+export type OccurrenceKind = 'task' | 'event';
+
+export interface OccurrenceOrigin {
+  /** calendar_source.id */
+  sourceId: string;
+  /** 在 Outlook 网页版打开这条事件 */
+  webLink: string | null;
+  /** 只读：重复事件（P0）或只读日历（节假日/生日）上的事件 */
+  readOnly: boolean;
+  /** 灰阶档位，用于事件块的左缘色条 */
+  colorKey: number;
+}
+
 export interface SeriesLike {
   id: string;
   title: string;
@@ -41,6 +61,9 @@ export interface SeriesLike {
   allDay: boolean;
   rrule: string | null;
   exceptions: readonly RecurExceptionLike[];
+  /** 缺省为 task，保持 M3 之前的调用方不用改 */
+  kind?: OccurrenceKind;
+  origin?: OccurrenceOrigin | null;
 }
 
 export interface Occurrence {
@@ -53,6 +76,8 @@ export interface Occurrence {
   allDay: boolean;
   /** 有覆盖时为例外 id，用来判断"这次能不能单改" */
   exceptionId: string | null;
+  kind: OccurrenceKind;
+  origin: OccurrenceOrigin | null;
 }
 
 function dayStart(ts: number): number {
@@ -212,6 +237,8 @@ export function expandSeries(series: SeriesLike, from: number, to: number, limit
         title: series.title,
         allDay: series.allDay,
         exceptionId: null,
+        kind: series.kind ?? 'task',
+        origin: series.origin ?? null,
       },
     ];
   }
@@ -247,6 +274,8 @@ export function expandSeries(series: SeriesLike, from: number, to: number, limit
       title: exception?.overrideTitle ?? series.title,
       allDay: series.allDay,
       exceptionId: exception?.id ?? null,
+      kind: series.kind ?? 'task',
+      origin: series.origin ?? null,
     });
   }
 

@@ -1,0 +1,83 @@
+/* 状态条：一条细线，不要卡片。它常驻在日历页顶部，占了视觉重量就会抢走日历的注意力 */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: 5px 10px;
+  border: 1px solid var(--n-200);
+  border-radius: var(--r-sm);
+  background: var(--n-50);
+  font-size: var(--t-xs);
+  line-height: var(--lh-xs);
+  color: var(--n-600);
+}
+
+.bar[data-state='ok'] {
+  border-color: var(--n-200);
+}
+
+.bar[data-state='warn'] {
+  border-color: var(--warn);
+  background: var(--n-50);
+  color: var(--warn);
+}
+
+/* 红色通栏：令牌失效是"数据在悄悄停止更新"，必须显眼 */
+.bar[data-state='danger'] {
+  border-color: var(--danger);
+  background: var(--n-50);
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.bar[data-state='idle'] {
+  border-style: dashed;
+}
+
+.text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.sep {
+  color: var(--n-400);
+}
+
+.note {
+  color: var(--n-500);
+}
+
+.action {
+  margin-left: auto;
+  flex: none;
+  border: 1px solid currentColor;
+  border-radius: var(--r-sm);
+  padding: 1px 8px;
+  font-size: var(--t-xs);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.action:hover {
+  background: var(--n-0);
+}
+
+.action:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}

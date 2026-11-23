@@ -4,7 +4,9 @@ import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { Db } from './db/types.js';
 import type { AppEnv } from './env.js';
 import { HttpError, sendError } from './http/errors.js';
+import type { GraphTokens } from './graph/token.js';
 import { authRoutes } from './routes/auth.js';
+import { calendarRoutes } from './routes/calendar.js';
 import { healthRoutes } from './routes/health.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { syncRoutes } from './routes/sync.js';
@@ -14,6 +16,8 @@ export interface AppDeps {
   env: AppEnv;
   db: Db;
   startedAt: number;
+  /** 未配置 Microsoft OAuth 时为 null：日历接口返回 503，其余功能照常 */
+  tokens?: GraphTokens | null;
 }
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -99,6 +103,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(authRoutes, { prefix: '/api', db, env });
   await app.register(oauthRoutes, { prefix: '/api', db, env });
   await app.register(syncRoutes, { prefix: '/api', db, env });
+  await app.register(calendarRoutes, { prefix: '/api', db, env, tokens: deps.tokens ?? null });
 
   return app;
 }

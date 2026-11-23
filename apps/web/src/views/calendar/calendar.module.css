@@ -323,7 +323,9 @@
   left: 0;
   right: 0;
   height: 0;
-  border-top: 1px solid var(--danger);
+  /* 当前时间线用墨黑而不是 danger：danger 在语义色里只表示"出错了"，
+     一条每小时都在动的红线会让日历看起来一直在报警 */
+  border-top: 1px solid var(--n-900);
   z-index: 4;
   pointer-events: none;
 }
