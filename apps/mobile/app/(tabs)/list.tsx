@@ -395,6 +395,8 @@ export default function ListScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.n0 },
   head: {
+    flexGrow: 0,
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
@@ -417,7 +419,7 @@ const styles = StyleSheet.create({
   onText: { color: C.n0 },
   title: { fontSize: FONT.xl, color: C.n900, fontWeight: '600' },
   sub: { marginTop: SP[1], fontSize: FONT.base, color: C.n500 },
-  searchWrap: { paddingHorizontal: SP[4], paddingTop: SP[2] },
+  searchWrap: { paddingHorizontal: SP[4], paddingTop: SP[2], flexGrow: 0, flexShrink: 0 },
   search: {
     minHeight: HIT,
     borderWidth: 1,
@@ -427,14 +429,23 @@ const styles = StyleSheet.create({
     fontSize: FONT.body,
     color: C.n900,
   },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: SP[2], paddingHorizontal: SP[4], paddingTop: SP[3] },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SP[2],
+    paddingHorizontal: SP[4],
+    paddingTop: SP[3],
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   spacer: { flex: 1 },
   // 高度写死：横向 ScrollView 会按内容撑开，chips 高度一变整条就跳，
   // 表现为"标签突然变高"。固定 48 与 chips 的 34 高对齐居中。
-  dateScroll: { height: 44 },
+  // flexGrow:0 —— 横向 ScrollView 默认会吃掉剩余高度，把筛选条撑开成一大片空白
+  dateScroll: { height: 44, flexGrow: 0, flexShrink: 0 },
   dateRow: { gap: SP[2], paddingHorizontal: SP[4], alignItems: 'center', height: '100%' },
   metaToday: { color: C.a500, fontWeight: '600' },
-  tagScroll: { height: 48 },
+  tagScroll: { height: 48, flexGrow: 0, flexShrink: 0 },
   tagRow: { gap: SP[2], paddingHorizontal: SP[4], alignItems: 'center', height: '100%' },
   chip: {
     height: 34,

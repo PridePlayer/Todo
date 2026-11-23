@@ -124,14 +124,9 @@ export default function TodayScreen() {
             onSubmitEditing={() => void submit()}
             blurOnSubmit={false}
           />
-          <Pressable
-            onPress={() => void submit()}
-            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
-            accessibilityRole="button"
-            accessibilityLabel="添加待办"
-          >
-            <Text style={styles.addBtnText}>＋</Text>
-          </Pressable>
+          {/* 这里不再放加号：右下角已有全局 FAB，两个加号会让人不知道点哪个。
+              输入框回车即存，本身就是提交入口 */}
+
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
