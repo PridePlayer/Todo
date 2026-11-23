@@ -40,6 +40,10 @@ export default function TabsLayout() {
         options={{ title: '今日', tabBarLabel: ({ color }) => <Text style={{ color, fontSize: FONT.xs }}>今日</Text> }}
       />
       <Tabs.Screen
+        name="list"
+        options={{ title: '列表', tabBarLabel: ({ color }) => <Text style={{ color, fontSize: FONT.xs }}>列表</Text> }}
+      />
+      <Tabs.Screen
         name="quadrant"
         options={{ title: '四象限', tabBarLabel: ({ color }) => <Text style={{ color, fontSize: FONT.xs }}>四象限</Text> }}
       />

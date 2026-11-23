@@ -90,7 +90,15 @@ export async function loadAll(): Promise<DocRow[]> {
       // 单行坏了不该让整个首屏空白：丢掉这一行，下次 pull 会重新写回
       continue;
     }
-    out.push({ tbl: row.tbl, id: row.id, rev: row.rev, deletedAt: row.deleted ? 0 : null, payload });
+    out.push({
+      tbl: row.tbl,
+      id: row.id,
+      rev: row.rev,
+      // 墓碑的真实删除时间在 payload 里；0 只作为"有墓碑但不知道时间"的兜底，
+      // 千万别用 0 当"未删除"——判断一律写 `deletedAt === null`
+      deletedAt: row.deleted ? Number(payload.deletedAt ?? 0) : null,
+      payload,
+    });
   }
   return out;
 }
@@ -129,6 +137,22 @@ export async function putRow(tbl: RowTable, id: string, rev: number, payload: Re
 export async function bumpRev(tbl: RowTable, id: string, rev: number): Promise<void> {
   const conn = await openDb();
   await conn.runAsync('UPDATE doc SET rev = ? WHERE tbl = ? AND id = ?', [rev, tbl, id]);
+}
+
+/**
+ * 本地软删：把 deleted 置 1，payload 留空。
+ *
+ * 不直接 DELETE 行：删完如果 push 失败，本地就再也找不到这条了，
+ * 队列里那条 delete 变成"指向一个不存在的行"，重试时无从判断该不该保留。
+ * 留墓碑才能让"离线删除 → 联网补推"这条路走得通。
+ */
+export async function softDeleteRow(tbl: RowTable, id: string, deletedAt: number): Promise<void> {
+  const conn = await openDb();
+  await conn.runAsync('UPDATE doc SET deleted = 1, payload = ? WHERE tbl = ? AND id = ?', [
+    JSON.stringify({ deletedAt }),
+    tbl,
+    id,
+  ]);
 }
 
 export async function getMeta(key: string): Promise<string | null> {

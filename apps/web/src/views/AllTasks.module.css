@@ -3,7 +3,9 @@
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  /* 四行：标题 / 标签条 / 新增条 / 列表。标签条单独一行而不是塞进标题区，
+     是因为标签数量不可控，塞进去会把搜索框挤到换行 */
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 .head {
@@ -85,14 +87,46 @@
   color: var(--n-700);
 }
 
-.quickSlot {
+.tagBar {
   grid-column: 1;
   grid-row: 2;
+  display: flex;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-4) var(--sp-2);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.tagChip {
+  flex: none;
+  height: 24px;
+  padding: 0 var(--sp-2);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  background: var(--n-0);
+  font-size: var(--t-sm);
+  color: var(--n-600);
+  white-space: nowrap;
+}
+
+.tagChip:hover {
+  background: var(--n-50);
+}
+
+.tagChip[data-on='true'] {
+  background: var(--a-500);
+  border-color: var(--a-500);
+  color: var(--n-0);
+}
+
+.quickSlot {
+  grid-column: 1;
+  grid-row: 3;
 }
 
 .list {
   grid-column: 1;
-  grid-row: 3;
+  grid-row: 4;
   min-height: 0;
   border-top: var(--line);
 }

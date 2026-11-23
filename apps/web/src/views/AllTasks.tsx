@@ -44,10 +44,13 @@ export function AllTasksView() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<StatusFilter>('open');
   const [sort, setSort] = useState<SortMode>('manual');
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  // 新建不再要求先选象限：默认落 04（不重要不紧急），也就是收件箱的位置。
+  // "收集"这一步一旦要求做分类决策，绝大多数人会在这一步放弃记录。
+  const quickTarget: Quadrant = 4;
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerId, setDrawerId] = useState<string | null>(null);
-  const [quickTarget, setQuickTarget] = useState<Quadrant>(1);
   const quickRef = useRef<HTMLInputElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const { entry, push, undo } = useUndo();
@@ -91,6 +94,7 @@ export function AllTasksView() {
     const statusOk = (task: Task) =>
       status === 'all' ||
       (status === 'open' ? task.completedAt === null : task.completedAt !== null);
+    const tagOk = (task: Task) => tagFilter === null || task.tagIds.includes(tagFilter);
     const textOk = (task: Task) =>
       needle === '' ||
       task.title.toLowerCase().includes(needle) ||
@@ -99,22 +103,24 @@ export function AllTasksView() {
     if (needle !== '') {
       // 搜索时拍平：层级会让结果更难扫，这里优先"找到"
       return alive
-        .filter((task) => statusOk(task) && textOk(task))
+        .filter((task) => statusOk(task) && tagOk(task) && textOk(task))
         .sort(sorter)
         .map((task) => ({ task, indent: 0, childCount: 0, collapsed: false }));
     }
 
     const out: Row[] = [];
     const walk = (task: Task, indent: number) => {
-      const kids = (byParent.get(task.id) ?? []).filter(statusOk);
+      const kids = (byParent.get(task.id) ?? []).filter((t) => statusOk(t) && tagOk(t));
       out.push({ task, indent, childCount: kids.length, collapsed: collapsed.has(task.id) });
       if (kids.length > 0 && !collapsed.has(task.id)) {
         for (const kid of [...kids].sort(sorter)) walk(kid, indent + 1);
       }
     };
-    for (const root of [...(byParent.get(null) ?? [])].filter(statusOk).sort(sorter)) walk(root, 0);
+    for (const root of [...(byParent.get(null) ?? [])].filter((t) => statusOk(t) && tagOk(t)).sort(sorter)) {
+      walk(root, 0);
+    }
     return out;
-  }, [alive, byParent, collapsed, query, sort, sorter, status]);
+  }, [alive, byParent, collapsed, query, sort, sorter, status, tagFilter]);
 
   const drawerTask = useMemo(
     () => alive.find((task) => task.id === drawerId) ?? null,
@@ -205,15 +211,42 @@ export function AllTasksView() {
         </div>
       </header>
 
+      {tagMap.size > 0 ? (
+        <div className={styles.tagBar} role="group" aria-label="按标签筛选">
+          <button
+            type="button"
+            className={styles.tagChip}
+            data-on={tagFilter === null}
+            aria-pressed={tagFilter === null}
+            onClick={() => setTagFilter(null)}
+          >
+            全部标签
+          </button>
+          {[...tagMap.values()].map((tag) => (
+            <button
+              key={tag.id}
+              type="button"
+              className={styles.tagChip}
+              data-on={tagFilter === tag.id}
+              aria-pressed={tagFilter === tag.id}
+              onClick={() => setTagFilter(tagFilter === tag.id ? null : tag.id)}
+            >
+              #{tag.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       <div className={styles.quickSlot}>
         <QuickAdd
           target={quickTarget}
-          onTargetChange={setQuickTarget}
+          onTargetChange={() => undefined}
           onCreate={async (title) => {
             await repo.create({ title, quadrant: quickTarget });
           }}
           inputRef={quickRef}
-          placeholder="新增一条待办，回车保存"
+          showQuadrantPicker={false}
+          placeholder="新增一条待办，回车保存（先收进 04，稍后再分类）"
         />
       </div>
 

@@ -4,9 +4,11 @@ import {
   QUADRANT_ORDER,
   combineDateTime,
   formatTimeRange,
+  rruleFromPreset,
   toDateInput,
   toTimeInput,
   type Quadrant,
+  type RrulePreset,
   type Tag,
   type Task,
   type TaskPatch,
@@ -32,6 +34,17 @@ interface DrawerProps {
 
 const PRIORITY_LABEL: Record<number, string> = { 0: '无', 1: '低', 2: '中', 3: '高' };
 const DAY_MS = 86_400_000;
+
+/** 面向 UI 的重复预设。值直接是 core 的 RrulePreset，不另造一套名字 */
+const REPEAT_OPTIONS: { key: RrulePreset | 'none'; label: string }[] = [
+  { key: 'none', label: '不重复' },
+  { key: 'daily', label: '每天' },
+  { key: 'weekday', label: '每个工作日' },
+  { key: 'weekly', label: '每周（按当天星期）' },
+  { key: 'monthly', label: '每月（按当天几号）' },
+  { key: 'monthly-last-workday', label: '每月最后一个周五' },
+  { key: 'yearly', label: '每年' },
+];
 
 export function Drawer({
   task,
@@ -64,6 +77,29 @@ export function Drawer({
   const startValue = task.startAt !== null ? toTimeInput(task.startAt) : '';
   const endValue = task.endAt !== null ? toTimeInput(task.endAt) : '';
   const range = formatTimeRange(task.startAt, task.endAt);
+
+  /**
+   * 反查当前 rrule 属于哪个预设。
+   *
+   * 判据是"用同一锚点重新生成后字面完全相等"，不是 includes(FREQ)。
+   * 后者会把 `FREQ=WEEKLY;BYDAY=MO;COUNT=6` 误判成"每周"，
+   * 用户一碰下拉框就把 COUNT 丢了 —— 结束条件静默消失是最难发现的那种数据损坏。
+   */
+  const repeatAnchor = task.startAt ?? (task.dueDate ? combineDateTime(task.dueDate, '09:00') : Date.now());
+  const repeatPreset: RrulePreset | 'none' | 'custom' = (() => {
+    if (!task.rrule) return 'none';
+    for (const option of REPEAT_OPTIONS) {
+      if (option.key === 'none') continue;
+      if (rruleFromPreset(option.key, repeatAnchor) === task.rrule) return option.key;
+    }
+    return 'custom';
+  })();
+
+  async function applyRepeat(next: RrulePreset | 'none') {
+    // 锚点用开始时间/日期，而不是"现在"：用 now 的话，"每周"会被固化到
+    // 今天所在的星期，与用户看到的任务日期不一致
+    await onPatch({ rrule: next === 'none' ? null : rruleFromPreset(next, repeatAnchor) });
+  }
 
   const canNest = task.depth < MAX_DEPTH - 1;
 
@@ -171,6 +207,32 @@ export function Drawer({
           </div>
           <p className={styles.hint}>
             {range ? `显示为 ${range}` : '只填日期就是全天任务；结束早于开始会自动算成次日'}
+          </p>
+        </section>
+
+        <section className={styles.field}>
+          <span className={styles.label}>重复</span>
+          <select
+            className={styles.control}
+            aria-label="重复规则"
+            value={repeatPreset}
+            onChange={(event) => void applyRepeat(event.target.value as RrulePreset | 'none')}
+          >
+            {repeatPreset === 'custom' ? (
+              <option value="custom" disabled>
+                自定义规则（保留原样）
+              </option>
+            ) : null}
+            {REPEAT_OPTIONS.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <p className={styles.hint}>
+            {task.rrule
+              ? `规则：${task.rrule}`
+              : '重复以开始时间为锚点。改了日期之后要重新选一次重复，才会按新日期算。'}
           </p>
         </section>
 

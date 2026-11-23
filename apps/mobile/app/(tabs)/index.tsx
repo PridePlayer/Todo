@@ -53,7 +53,9 @@ export default function TodayScreen() {
     const value = title.trim();
     if (!value) return;
     setTitle('');
-    await createTask(value);
+    // 只传标题：象限、日期、重复都留到详情页再补。
+    // 新建就逼人做四个分类决策，是"收集"这一步最容易断掉的地方。
+    await createTask({ title: value });
   }
 
   return (

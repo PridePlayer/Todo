@@ -4,6 +4,7 @@ import {
   habitLogSchema,
   habitSchema,
   listSchema,
+  quadrantOf,
   recurExceptionSchema,
   tagSchema,
   taskSchema,
@@ -32,6 +33,7 @@ import {
   putRow,
   queueOp,
   setMeta,
+  softDeleteRow,
   wipe,
   type DocRow,
 } from './db/local';
@@ -49,6 +51,24 @@ const EMPTY: Snapshot = { tasks: [], lists: [], tags: [], habits: [], logs: [], 
 
 export type SyncPhase = 'idle' | 'syncing' | 'offline' | 'error';
 
+/**
+ * 新建任务的入参。
+ *
+ * 除了 title 全是可选 —— 这是"新建不强制分类"的落地：手机上敲一句话回车就存了，
+ * 象限、日期、重复都留到详情页再补。默认落到 04（不重要不紧急），
+ * 也就是 GTD 的"收件箱"位置，之后在四象限里归类。
+ */
+export interface NewTaskInput {
+  title: string;
+  quadrant?: 1 | 2 | 3 | 4;
+  dueDate?: string | null;
+  startAt?: number | null;
+  rrule?: string | null;
+  tagIds?: string[];
+  note?: string | null;
+  listId?: string;
+}
+
 interface AppState {
   ready: boolean;
   auth: AuthState | null;
@@ -63,7 +83,10 @@ interface AppState {
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
   toggleTask: (id: string) => Promise<void>;
-  createTask: (title: string) => Promise<void>;
+  createTask: (input: NewTaskInput) => Promise<string>;
+  patchTask: (id: string, patch: Record<string, unknown>) => Promise<void>;
+  deleteTask: (id: string) => Promise<void>;
+  ensureTag: (name: string) => Promise<Tag>;
   checkHabit: (habitId: string, logDate: string, delta: number) => Promise<void>;
   changeApiBase: (value: string) => Promise<void>;
 }
@@ -318,34 +341,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh, snapshot.tasks]);
 
-  const createTask = useCallback(async (title: string) => {
-    const trimmed = title.trim();
-    if (!trimmed) return;
+  const createTask = useCallback(async (input: NewTaskInput) => {
+    const trimmed = input.title.trim();
+    if (!trimmed) return '';
     const device = await ensureDeviceId();
     const now = Date.now();
     const id = ulid();
+    const quadrant = input.quadrant ?? 4;
+    const bits = 4 - quadrant;
     const task: Task = {
       id,
-      listId: 'list-inbox',
+      listId: input.listId ?? 'list-inbox',
       parentId: null,
       path: `${id}/`,
       depth: 0,
       title: trimmed,
-      note: null,
-      quadrant: 4,
-      important: false,
-      urgent: true,
+      note: input.note ?? null,
+      quadrant,
+      // important/urgent 是唯一真源，quadrant 是派生值；两者必须同时对上，
+      // 否则四象限里按 quadrant 查到的行，详情页的开关会显示成另一组状态
+      important: (bits & 2) !== 0,
+      urgent: (bits & 1) !== 0,
       priority: 0,
-      dueDate: null,
-      startAt: null,
+      dueDate: input.dueDate ?? null,
+      startAt: input.startAt ?? null,
       endAt: null,
-      allDay: false,
+      allDay: input.startAt == null,
       location: null,
-      tagIds: [],
+      tagIds: input.tagIds ?? [],
       completedAt: null,
       archivedAt: null,
       sortOrder: -now,
-      rrule: null,
+      rrule: input.rrule ?? null,
       remindAt: null,
       createdAt: now,
       updatedAt: now,
@@ -365,7 +392,100 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSnapshot((prev) => ({ ...prev, tasks: [...prev.tasks, task] }));
     setPending((n) => n + 1);
     void refresh();
+    return id;
   }, [refresh]);
+
+  /**
+   * 局部更新。
+   *
+   * `base` 必须带上每个字段改动前的值 —— 服务端靠它区分"远端到底动没动过这个字段"。
+   * 不带的话，两台设备改不同字段会被误判成冲突，界面上会出现一堆假的"冲突待决"。
+   */
+  const patchTask = useCallback(async (id: string, patch: Record<string, unknown>) => {
+    const task = snapshot.tasks.find((t) => t.id === id);
+    if (!task) return;
+    const device = await ensureDeviceId();
+    const next: Task = { ...task, ...patch, updatedAt: Date.now() } as Task;
+
+    const fields: Record<string, unknown> = { ...patch };
+    const base: Record<string, unknown> = {};
+    for (const key of Object.keys(patch)) {
+      base[key] = (task as unknown as Record<string, unknown>)[key];
+    }
+
+    // 象限是派生值：只改开关不同步 quadrant，列表按 quadrant 排序就会错位
+    if (patch.important !== undefined || patch.urgent !== undefined) {
+      const derived = quadrantOf(next.important, next.urgent);
+      next.quadrant = derived;
+      fields.quadrant = derived;
+      base.quadrant = task.quadrant;
+    }
+
+    await putRow('task', id, task.rev, next as unknown as Record<string, unknown>);
+    await queueOp({
+      opId: ulid(),
+      table: 'task',
+      action: 'update',
+      id,
+      baseRev: task.rev,
+      fields,
+      base,
+      hlc: nextHlc(device),
+    });
+    setSnapshot((prev) => ({ ...prev, tasks: prev.tasks.map((t) => (t.id === id ? next : t)) }));
+    setPending((n) => n + 1);
+    void refresh();
+  }, [refresh, snapshot.tasks]);
+
+  const deleteTask = useCallback(async (id: string) => {
+    const task = snapshot.tasks.find((t) => t.id === id);
+    if (!task) return;
+    const device = await ensureDeviceId();
+    const now = Date.now();
+    await softDeleteRow('task', id, now);
+    await queueOp({
+      opId: ulid(),
+      table: 'task',
+      action: 'delete',
+      id,
+      baseRev: task.rev,
+      fields: {},
+      hlc: nextHlc(device),
+    });
+    setSnapshot((prev) => ({ ...prev, tasks: prev.tasks.filter((t) => t.id !== id) }));
+    setPending((n) => n + 1);
+    void refresh();
+  }, [refresh, snapshot.tasks]);
+
+  /**
+   * 找标签或建标签。
+   *
+   * 先按名字在本地找（同名不同 id 会变成两个标签，界面上看就是重复项），
+   * 找不到才新建。新建的标签要立刻入队，否则别的设备永远看不到它。
+   */
+  const ensureTag = useCallback(async (name: string): Promise<Tag> => {
+    const trimmed = name.trim().replace(/^#/, '');
+    const existing = snapshot.tags.find((tag) => tag.name === trimmed);
+    if (existing) return existing;
+
+    const device = await ensureDeviceId();
+    const tag: Tag = { id: ulid(), name: trimmed, colorKey: 0 };
+    // Tag 只有 id/name/colorKey 三个字段；服务端的 rev/时间戳不在客户端模型里，
+    // 所以 fields 只带这三个，多带会被服务端当成未知列丢弃
+    await putRow('tag', tag.id, 1, tag as unknown as Record<string, unknown>);
+    await queueOp({
+      opId: ulid(),
+      table: 'tag',
+      action: 'create',
+      id: tag.id,
+      baseRev: 0,
+      fields: tag as unknown as Record<string, unknown>,
+      hlc: nextHlc(device),
+    });
+    setSnapshot((prev) => ({ ...prev, tags: [...prev.tags, tag] }));
+    setPending((n) => n + 1);
+    return tag;
+  }, [snapshot.tags]);
 
   /**
    * 打卡。
@@ -440,6 +560,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refresh,
       toggleTask,
       createTask,
+      patchTask,
+      deleteTask,
+      ensureTag,
       checkHabit,
       changeApiBase,
     }),
@@ -458,6 +581,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refresh,
       toggleTask,
       createTask,
+      patchTask,
+      deleteTask,
+      ensureTag,
       checkHabit,
       changeApiBase,
     ],
