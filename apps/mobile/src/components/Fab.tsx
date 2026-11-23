@@ -102,14 +102,17 @@ export function Fab() {
 
   return (
     <>
-      <Pressable
-        onPress={() => setOpen(true)}
-        style={styles.fab}
-        accessibilityRole="button"
-        accessibilityLabel="快速新建"
-      >
-        <Text style={styles.fabPlus}>＋</Text>
-      </Pressable>
+      {/* 打开弹窗时必须藏起来，否则右下角会叠两个加号 */}
+      {!open ? (
+        <Pressable
+          onPress={() => setOpen(true)}
+          style={styles.fab}
+          accessibilityRole="button"
+          accessibilityLabel="快速新建"
+        >
+          <Text style={styles.fabPlus}>＋</Text>
+        </Pressable>
+      ) : null}
 
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel="关闭" />
@@ -208,7 +211,7 @@ export function Fab() {
               </Field>
 
               <Field label="重复">
-                <View style={styles.tagWrap}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagRow}>
                   {REPEAT_LABEL.map((o) => (
                     <Pressable
                       key={o.key}
@@ -220,7 +223,7 @@ export function Fab() {
                       <Text style={[styles.chipText, repeat === o.key && styles.onText]}>{o.label}</Text>
                     </Pressable>
                   ))}
-                </View>
+                </ScrollView>
 
                 {repeat === 'weekly' ? (
                   <View style={[styles.tagWrap, { marginTop: SP[2] }]}>
@@ -256,20 +259,22 @@ export function Fab() {
                 ) : null}
               </Field>
 
-              <View style={styles.actions}>
-                <Pressable onPress={() => setOpen(false)} style={styles.ghost} accessibilityRole="button">
-                  <Text style={styles.ghostText}>取消</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => void submit()}
-                  disabled={title.trim() === ''}
-                  style={[styles.primary, title.trim() === '' && styles.primaryDisabled]}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.primaryText}>创建</Text>
-                </Pressable>
-              </View>
             </ScrollView>
+
+            {/* 固定在底部：表单字段多，滚到底才看得到按钮等于强制多滚一次 */}
+            <View style={styles.actions}>
+              <Pressable onPress={() => setOpen(false)} style={styles.ghost} accessibilityRole="button">
+                <Text style={styles.ghostText}>取消</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => void submit()}
+                disabled={title.trim() === ''}
+                style={[styles.primary, title.trim() === '' && styles.primaryDisabled]}
+                accessibilityRole="button"
+              >
+                <Text style={styles.primaryText}>创建</Text>
+              </Pressable>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -346,6 +351,7 @@ const styles = StyleSheet.create({
     color: C.n900,
   },
   tagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SP[1], alignItems: 'center' },
+  tagRow: { gap: SP[1], alignItems: 'center' },
   chip: {
     height: 32,
     paddingHorizontal: SP[2],

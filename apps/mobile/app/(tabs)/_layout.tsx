@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
 import { ActivityIndicator, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Fab } from '../../src/components/Fab';
 import { useApp } from '../../src/store';
 import { C, FONT } from '../../src/theme';
@@ -24,6 +25,8 @@ const TAB_TITLE: Record<string, string> = {
 
 export default function TabsLayout() {
   const { ready, auth } = useApp();
+  // Android 手势导航条会盖住 tab 文字、吃掉可点区域，必须留出高度
+  const insets = useSafeAreaInsets();
 
   // 首帧还没读完 SecureStore 时不能直接跳登录页：
   // 那样每次冷启动都会闪一下登录界面再跳回来
@@ -48,8 +51,9 @@ export default function TabsLayout() {
           backgroundColor: C.n0,
           borderTopColor: C.n200,
           borderTopWidth: 1,
-          height: 56,
-          paddingBottom: 6,
+          // 56 是内容高度，insets.bottom 是手势条，两者相加 tab 才完整露出来
+          height: 56 + insets.bottom,
+          paddingBottom: 6 + insets.bottom,
           paddingTop: 6,
         },
         tabBarLabelStyle: { fontSize: FONT.xs },

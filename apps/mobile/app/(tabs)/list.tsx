@@ -167,7 +167,6 @@ export default function ListScreen() {
             <Text style={[styles.chipText, status === key && styles.chipTextOn]}>{STATUS_LABEL[key]}</Text>
           </Pressable>
         ))}
-        <View style={styles.spacer} />
         <Pressable
           onPress={() => setMode(mode === 'flat' ? 'tag' : 'flat')}
           style={[styles.chip, mode === 'tag' && styles.chipOn]}
