@@ -455,6 +455,24 @@ try {
   `);
   check('改完开始时间后仍是 1 小时，没有被撑成跨天', blockHeight === '56px', blockHeight || '未找到块');
 
+  // 截图：只在 SHOT=1 时保存，用来目视检查排版（自动化断言抓不到"难看"）
+  if (process.env.SHOT === '1') {
+    // 用桌面尺寸截图：默认窗口是 750x450，会自动落进移动端布局，看不出桌面排版
+    await page.send('Emulation.setDeviceMetricsOverride', {
+      width: 1280, height: 900, deviceScaleFactor: 1, mobile: false,
+    });
+    await page.evaluate(`
+      const grid = document.querySelector('[class*="gridWrap"]');
+      if (grid) grid.scrollTop = 8 * 56;
+      return true;
+    `);
+    await new Promise((r) => setTimeout(r, 400));
+    const shot = await page.send('Page.captureScreenshot', { format: 'png' });
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync('.data/calendar.png', Buffer.from(shot.data, 'base64'));
+    console.log('  · 截图已保存 .data/calendar.png');
+  }
+
   // 13) 退出前清理日历测试数据（KEEP=1 时保留，方便事后查库）
   if (process.env.KEEP === '1') {
     console.log('  · KEEP=1：跳过清理');

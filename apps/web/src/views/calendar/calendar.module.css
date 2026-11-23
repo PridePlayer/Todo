@@ -251,6 +251,10 @@
 }
 
 .dayCols {
+  /* 必须显式吃掉剩余宽度：.bodyRow 是 flex 容器，而 .dayCols 自身如果不 flex:1
+     会被压成 0 宽——症状是"表头有日期、下面一片空白"，很容易被当成数据没渲染 */
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   min-height: 0;
 }
