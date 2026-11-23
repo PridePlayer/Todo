@@ -47,7 +47,15 @@ interface PendingScope {
 }
 
 export function CalendarView() {
-  const [mode, setMode] = useState<CalendarMode>('week');
+  // 手机上 7 列并排，每列只剩 40px：时间标签和标题都被截成两个字，
+  // 周视图在那里不是"密"而是"读不出来"。默认降到日视图，用户想切还是能切。
+  //
+  // 这里必须写 globalThis 而不是 window：下面有个 `const window = useMemo(...)`（时间窗口），
+  // 同名的 const 在整个函数体里都处于 TDZ，直接写 window.innerWidth 会抛
+  // "Cannot access 'window' before initialization"，整个视图白屏。
+  const [mode, setMode] = useState<CalendarMode>(() =>
+    globalThis.innerWidth !== undefined && globalThis.innerWidth < 640 ? 'day' : 'week',
+  );
   const [anchor, setAnchor] = useState(() => dayStart(Date.now()));
   const [editing, setEditing] = useState<Occurrence | null>(null);
   const [pending, setPending] = useState<PendingScope | null>(null);

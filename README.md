@@ -111,13 +111,15 @@ TOKEN_ENC_KEY=$(openssl rand -base64 32)
 
 ## 部署
 
-完整步骤见 `docs/02-架构与技术方案.md` §11。服务器上只需：
+**完整步骤见 [`docs/09-部署手册.md`](docs/09-部署手册.md)**（按"照着敲"的顺序写，每步都有验证命令与失败对照表）。
+
+首次上线做一次 0–8 节：升 Node ≥ 22.12 → 建 `grid` 库与 `grid_rw` 账号（**现有 MySQL 5.7 就够**）→ 拉代码填 `.env` → `db:migrate` + `seed:user` → 构建 → systemd → nginx 证书 → 连 Outlook。
+
+之后每次更新只需：
 
 ```bash
 cd /www/wwwroot/todo && bash deploy/deploy.sh
 ```
-
-前提（一次性）：Node 24、pnpm、按 `deploy/env.example` 填 `.env`、MySQL 8.0 独立实例（端口 3307）建好 `grid` 库与 `grid_rw` 账号、nginx 站点按 `deploy/nginx.conf.example` 配好并对 `apps/web/dist`、域名 `todo.stellamp.me` 的 A 记录与证书就绪。
 
 ---
 

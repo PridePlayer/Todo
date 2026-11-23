@@ -1,7 +1,29 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import type { Db, Row, SqlExecutor } from './types.js';
+
+type DatabaseSyncCtor = new (file: string) => import('node:sqlite').DatabaseSync;
+
+/**
+ * 延迟到真正要用的时候才加载 node:sqlite。
+ *
+ * 写成静态 `import { DatabaseSync } from 'node:sqlite'` 时，Node < 22.5 会在
+ * **进程启动第一步**就抛 ERR_UNKNOWN_BUILTIN_MODULE —— 哪怕生产环境配的是
+ * `mysql://`、这个文件里的代码一行都不会执行。一个"只是本地开发用"的驱动
+ * 于是变成了部署阻塞点，而且报错信息（找不到模块）和真实原因（版本不够）对不上。
+ */
+function loadSqlite(): DatabaseSyncCtor {
+  const requireHere = createRequire(import.meta.url);
+  try {
+    return (requireHere('node:sqlite') as { DatabaseSync: DatabaseSyncCtor }).DatabaseSync;
+  } catch {
+    throw new Error(
+      '当前 Node 没有内置 node:sqlite（需要 22.5+）。\n' +
+        '本地开发请升级 Node；生产环境把 DB_URL 配成 mysql://... 即可，不会走到这里。',
+    );
+  }
+}
 
 /**
  * 开发用驱动：Node 22.5+ 内置的 node:sqlite。
@@ -12,6 +34,7 @@ export function createSqliteDb(file: string): Db {
   if (file !== ':memory:') {
     fs.mkdirSync(path.dirname(file), { recursive: true });
   }
+  const DatabaseSync = loadSqlite();
   const raw = new DatabaseSync(file);
   raw.exec('PRAGMA journal_mode = WAL');
   raw.exec('PRAGMA synchronous = NORMAL');

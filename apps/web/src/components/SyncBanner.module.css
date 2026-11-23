@@ -1,6 +1,7 @@
 /* 状态条：一条细线，不要卡片。它常驻在日历页顶部，占了视觉重量就会抢走日历的注意力 */
 
 .bar {
+  margin-top: var(--sp-3);
   display: flex;
   align-items: center;
   gap: var(--sp-3);

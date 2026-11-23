@@ -13,8 +13,8 @@
   width: min(440px, 100%);
   background: var(--n-0);
   border: 1px solid var(--n-300);
-  border-radius: var(--r-md);
-  padding: var(--sp-5);
+  border-radius: var(--r-sm);
+  padding: var(--sp-6);
 }
 
 .title {

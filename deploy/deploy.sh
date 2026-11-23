@@ -3,7 +3,8 @@
 #   cd /www/wwwroot/todo && bash deploy/deploy.sh
 #
 # 前提（只需做一次）：
-#   1. Node 24：宝塔「Node 版本管理器」或 nvm
+#   1. Node ≥ 22.12（推荐 24 LTS）：宝塔「Node 版本管理器」或 nvm
+#      低于这个版本会在 pnpm install 阶段被 engines 拦下
 #   2. pnpm：corepack enable && corepack prepare pnpm@latest --activate
 #   3. .env 已按 deploy/env.example 填好，库里已建 grid 与 grid_rw
 set -euo pipefail
