@@ -752,6 +752,69 @@ try {
   `);
   await new Promise((r) => setTimeout(r, 300));
 
+  // 16) M6a 设备令牌：签发 → 列表显示 → 注销 → 移除记录
+  //     这四项对应 docs/06 A7~A9 的用户可见部分（协议层由 tools/device-check.ts 覆盖）
+  await page.evaluate(`
+    document.querySelector('nav[aria-label="主导航"] button[aria-label="设置"]')?.click();
+    return true;
+  `);
+  await page.waitUntil(
+    "[...document.querySelectorAll('h2')].some(h => h.textContent.trim() === '设备令牌')",
+    10000,
+    '设备令牌区块',
+  );
+
+  const deviceFlow = await page.evaluate(`
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    const input = document.querySelector('input[aria-label="设备名"]');
+    if (!input) return { error: 'no-input' };
+    setter.call(input, '浏览器验收');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(80);
+    [...document.querySelectorAll('button')].find(b => b.textContent.trim() === '生成新令牌')?.click();
+    await sleep(900);
+    // 必须限定在"令牌"那个 code 上：设置页别处还有一个 <code>grid</code>（数据库驱动名）
+    const code = document.querySelector('code[class*="token"]');
+    const row = [...document.querySelectorAll('li[data-state]')].find(li => li.textContent.includes('浏览器验收'));
+    return {
+      token: code ? code.textContent.trim() : '',
+      hasRow: Boolean(row),
+      state: row ? row.getAttribute('data-state') : null,
+      text: row ? row.innerText.replace(/\\n/g, ' | ') : '',
+    };
+  `);
+  check(
+    '生成后立刻显示一次明文令牌（grd_ 开头）',
+    typeof deviceFlow.token === 'string' && deviceFlow.token.startsWith('grd_') && deviceFlow.token.length === 47,
+    `${String(deviceFlow.token).slice(0, 8)}…（${String(deviceFlow.token).length} 字符）`,
+  );
+  check('列表里出现这台设备且标为有效', deviceFlow.state === 'active', deviceFlow.text);
+  check('显示剩余天数', String(deviceFlow.text).includes('剩 180 天'), deviceFlow.text);
+
+  const deviceRevoked = await page.evaluate(`
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    window.confirm = () => true;
+    const row = () => [...document.querySelectorAll('li[data-state]')].find(li => li.textContent.includes('浏览器验收'));
+    [...row().querySelectorAll('button')].find(b => b.textContent.trim() === '注销此设备')?.click();
+    await sleep(900);
+    const after = row();
+    return {
+      state: after ? after.getAttribute('data-state') : null,
+      text: after ? after.innerText.replace(/\\n/g, ' | ') : '',
+    };
+  `);
+  check('注销后立刻标为已注销（不等过期）', deviceRevoked.state === 'revoked', deviceRevoked.text);
+
+  const devicePurged = await page.evaluate(`
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const row = () => [...document.querySelectorAll('li[data-state]')].find(li => li.textContent.includes('浏览器验收'));
+    [...(row()?.querySelectorAll('button') ?? [])].find(b => b.textContent.trim() === '移除记录')?.click();
+    await sleep(900);
+    return ![...document.querySelectorAll('li[data-state]')].some(li => li.textContent.includes('浏览器验收'));
+  `);
+  check('已注销的记录可以移除，列表里不再出现', devicePurged === true);
+
   // 截图：只在 SHOT=1 时保存，用来目视检查排版（自动化断言抓不到"难看"）
   if (process.env.SHOT === '1') {
     // 用桌面尺寸截图：默认窗口是 750x450，会自动落进移动端布局，看不出桌面排版

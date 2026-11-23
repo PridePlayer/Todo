@@ -1,0 +1,209 @@
+.section {
+  border-top: var(--line);
+  padding: var(--sp-4) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.h2 {
+  font-size: var(--t-base);
+  font-weight: 600;
+  color: var(--n-700);
+  letter-spacing: 0.02em;
+}
+
+.hint {
+  font-size: var(--t-sm);
+  line-height: var(--lh-sm);
+  color: var(--n-500);
+  max-width: 62ch;
+}
+
+.createRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.input {
+  flex: 1 1 200px;
+  max-width: 280px;
+  height: 28px;
+  padding: 0 var(--sp-2);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  background: var(--n-0);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--a-500);
+}
+
+.primary {
+  height: 28px;
+  padding: 0 var(--sp-3);
+  background: var(--n-900);
+  color: var(--n-0);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  white-space: nowrap;
+}
+
+.primary:hover {
+  background: var(--n-1000);
+}
+
+.primary:disabled {
+  background: var(--n-300);
+  cursor: not-allowed;
+}
+
+.ghost {
+  height: 28px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  color: var(--n-600);
+  white-space: nowrap;
+}
+
+.ghost:hover {
+  border-color: var(--n-500);
+  color: var(--n-900);
+}
+
+/* 明文令牌区：整块用强调色描边，因为它是"一次性、必须现在处理"的东西 */
+.issued {
+  border: 1px solid var(--a-200);
+  background: var(--a-100);
+  border-radius: var(--r-sm);
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.issuedTitle {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--a-700);
+}
+
+.issuedHint {
+  font-size: var(--t-xs);
+  line-height: var(--lh-sm);
+  color: var(--n-600);
+}
+
+.tokenRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.token {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  line-height: var(--lh-sm);
+  background: var(--n-0);
+  border: 1px solid var(--a-200);
+  border-radius: var(--r-sm);
+  padding: 4px var(--sp-2);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.error {
+  font-size: var(--t-sm);
+  color: var(--danger);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  border-top: var(--line);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(160px, 1.4fr) auto auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: var(--line);
+}
+
+.row[data-state='revoked'] .label,
+.row[data-state='expired'] .label {
+  color: var(--n-400);
+  text-decoration: line-through;
+  text-decoration-color: var(--n-300);
+}
+
+.label {
+  font-size: var(--t-body);
+  color: var(--n-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: var(--t-xs);
+  color: var(--n-500);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.state {
+  font-size: var(--t-xs);
+  color: var(--n-500);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-pill);
+  padding: 1px 8px;
+  white-space: nowrap;
+  justify-self: start;
+}
+
+.state[data-state='active'] {
+  border-color: var(--a-200);
+  color: var(--a-600);
+}
+
+.state[data-state='expiring'] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.state[data-state='expired'],
+.state[data-state='revoked'] {
+  border-color: var(--n-200);
+  color: var(--n-400);
+}
+
+@media (max-width: 720px) {
+  .row {
+    grid-template-columns: 1fr auto;
+    row-gap: var(--sp-1);
+  }
+
+  .meta {
+    grid-column: 1 / -1;
+  }
+}

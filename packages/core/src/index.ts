@@ -130,6 +130,19 @@ export {
 } from './models/calendar.js';
 
 export {
+  deviceTokenSchema,
+  deviceTokenListSchema,
+  issuedDeviceTokenSchema,
+  deviceLoginResponseSchema,
+  daysLeft,
+  deviceTokenState,
+  type DeviceTokenInfo,
+  type IssuedDeviceToken,
+  type DeviceLoginResponse,
+  type DeviceTokenState,
+} from './models/device.js';
+
+export {
   systemTimeZone,
   toIanaTimeZone,
   parseZonedDateTime,

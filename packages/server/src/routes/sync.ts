@@ -8,7 +8,7 @@ import {
   type SyncOpResult,
 } from '@grid/core';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { resolveSession } from '../auth/session.js';
+import { requireUser as authenticateRequest } from '../auth/require.js';
 import type { Db, Row, SqlExecutor } from '../db/types.js';
 import type { AppEnv } from '../env.js';
 import { HttpError } from '../http/errors.js';
@@ -153,12 +153,8 @@ function buildUpdate(table: SyncTableName, columns: Record<string, unknown>): { 
 export async function syncRoutes(app: FastifyInstance, deps: Deps): Promise<void> {
   const { db, env } = deps;
 
-  async function requireUser(req: FastifyRequest): Promise<string> {
-    const raw = req.cookies[env.cookieName];
-    const userId = typeof raw === 'string' ? await resolveSession(db, raw, env.sessionTtlMs) : null;
-    if (!userId) throw new HttpError(401, 'unauthenticated', '请先登录');
-    return userId;
-  }
+  // 统一鉴权：Cookie 会话（Web）与 Bearer 设备令牌（Android）都从这里进
+  const requireUser = (req: FastifyRequest): Promise<string> => authenticateRequest(db, env, req);
 
   async function currentSeq(tx: SqlExecutor = db): Promise<number> {
     const rows = await tx.query<{ seq: unknown }>('SELECT seq FROM change_seq WHERE id = 1');

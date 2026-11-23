@@ -7,6 +7,7 @@ import { HttpError, sendError } from './http/errors.js';
 import type { GraphTokens } from './graph/token.js';
 import { authRoutes } from './routes/auth.js';
 import { calendarRoutes } from './routes/calendar.js';
+import { deviceRoutes } from './routes/devices.js';
 import { habitRoutes } from './routes/habits.js';
 import { healthRoutes } from './routes/health.js';
 import { oauthRoutes } from './routes/oauth.js';
@@ -100,12 +101,25 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
   });
 
+  // 设备令牌临期时会静默轮换，新令牌只能通过响应头交回客户端。
+  // 放在钩子里而不是每个 handler 里：漏一处的症状是"那台设备第二天突然要求重新登录"，
+  // 而那种 bug 只在 173 天后才出现，根本对不上因果。
+  app.addHook('onSend', async (req, reply, payload) => {
+    if (req.deviceRotatedToken) {
+      reply.header('x-device-token', req.deviceRotatedToken);
+      // 客户端换了令牌，就不要让任何中间层缓存这次响应
+      reply.header('cache-control', 'no-store');
+    }
+    return payload;
+  });
+
   await app.register(healthRoutes, { prefix: '/api', db, startedAt: deps.startedAt, version: VERSION });
   await app.register(authRoutes, { prefix: '/api', db, env });
   await app.register(oauthRoutes, { prefix: '/api', db, env });
   await app.register(syncRoutes, { prefix: '/api', db, env });
   await app.register(calendarRoutes, { prefix: '/api', db, env, tokens: deps.tokens ?? null });
   await app.register(habitRoutes, { prefix: '/api', db, env });
+  await app.register(deviceRoutes, { prefix: '/api', db, env });
 
   return app;
 }

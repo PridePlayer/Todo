@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { resolveSession } from '../auth/session.js';
+import { requireUser as authenticateRequest } from '../auth/require.js';
 import { verifyCsrfToken } from '../auth/csrf.js';
 import type { Db } from '../db/types.js';
 import type { AppEnv } from '../env.js';
@@ -28,12 +28,8 @@ interface Deps {
 export async function calendarRoutes(app: FastifyInstance, deps: Deps): Promise<void> {
   const { db, env, tokens } = deps;
 
-  async function requireUser(req: FastifyRequest): Promise<string> {
-    const raw = req.cookies[env.cookieName];
-    const userId = typeof raw === 'string' ? await resolveSession(db, raw, env.sessionTtlMs) : null;
-    if (!userId) throw new HttpError(401, 'unauthenticated', '请先登录');
-    return userId;
-  }
+  // 统一鉴权：Cookie 会话（Web）与 Bearer 设备令牌（Android）都从这里进
+  const requireUser = (req: FastifyRequest): Promise<string> => authenticateRequest(db, env, req);
 
   function requireGraph(): GraphTokens {
     if (!tokens) {

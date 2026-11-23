@@ -8,6 +8,14 @@ import {
   type SessionResponse,
 } from '../models/session.js';
 import {
+  deviceLoginResponseSchema,
+  deviceTokenListSchema,
+  issuedDeviceTokenSchema,
+  type DeviceLoginResponse,
+  type DeviceTokenInfo,
+  type IssuedDeviceToken,
+} from '../models/device.js';
+import {
   calendarStatusSchema,
   calendarSyncResultSchema,
   type CalendarStatus,
@@ -72,6 +80,14 @@ export interface ApiClient {
   calendarPatchSource(id: string, patch: { isVisible?: boolean; isSynced?: boolean }): Promise<void>;
   /** 重新发现日历列表（用户新建/删除了日历） */
   calendarRefreshSources(): Promise<{ sources: { id: string; name: string; isVisible: boolean; isSynced: boolean; canEdit: boolean }[] }>;
+  /** App 设备登录：一步拿到长效令牌，不落 Cookie（Android 端专用） */
+  deviceLogin(email: string, password: string, label?: string): Promise<DeviceLoginResponse>;
+  /** 本账号的全部设备令牌（含已吊销/已过期，设置页要显示"已失效"） */
+  listDevices(): Promise<{ tokens: DeviceTokenInfo[] }>;
+  /** 签发新令牌。明文只出现这一次，服务端只存 SHA-256 */
+  createDevice(label?: string): Promise<IssuedDeviceToken>;
+  /** 注销某台设备：立即失效，不等过期 */
+  revokeDevice(id: string, purge?: boolean): Promise<void>;
   /** 当前持有的 CSRF token（调试用） */
   currentCsrfToken(): string | null;
 }
@@ -241,6 +257,33 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
             }),
           ),
         }),
+      });
+    },
+
+    async deviceLogin(email, password, label) {
+      return request('/auth/device-login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, label }),
+        parse: deviceLoginResponseSchema,
+      });
+    },
+
+    async listDevices() {
+      return request('/devices', { parse: deviceTokenListSchema });
+    },
+
+    async createDevice(label) {
+      return request('/devices', {
+        method: 'POST',
+        body: JSON.stringify({ label }),
+        parse: issuedDeviceTokenSchema,
+      });
+    },
+
+    async revokeDevice(id, purge = false) {
+      await request(`/devices/${encodeURIComponent(id)}${purge ? '?purge=1' : ''}`, {
+        method: 'DELETE',
+        parse: z.object({ revoked: z.boolean(), purged: z.boolean().optional() }),
       });
     },
 
