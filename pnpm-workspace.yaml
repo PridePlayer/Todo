@@ -1,3 +1,11 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# 供应链防护（minimumReleaseAge）会拒绝"刚发布不到 N 小时"的包，防止抢注投毒。
+# 这三个是传递依赖、只在构建期用（不进 APK 运行时），但版本号恰好卡在 cutoff 内，
+# EAS 云端构建会因此直接失败。排除 age 检查，不降级版本。
+minimumReleaseAgeExclude:
+  - caniuse-lite
+  - multitars
+  - node-forge
