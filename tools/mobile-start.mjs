@@ -22,6 +22,8 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const mobileDir = path.resolve(here, '..', 'apps', 'mobile');
 const tunnel = process.argv.includes('--tunnel');
+// 加了新原生依赖后如果仍然报老错误，是 Metro 缓存没失效，加 --clear 清掉再启
+const clear = process.argv.includes('--clear');
 
 /** 私有网段：手机与电脑要互通，必须落在这些段里 */
 function isPrivate(ip) {
@@ -68,5 +70,6 @@ const env = { ...process.env };
 if (!tunnel) env.REACT_NATIVE_PACKAGER_HOSTNAME = candidates[0].address;
 
 const args = [cli, 'start', tunnel ? '--tunnel' : '--lan', '--port', '8081'];
+if (clear) args.push('--clear');
 const child = spawn(process.execPath, args, { cwd: mobileDir, stdio: 'inherit', env });
 child.on('exit', (code) => process.exit(code ?? 0));
