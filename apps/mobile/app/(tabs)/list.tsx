@@ -135,59 +135,26 @@ export default function ListScreen() {
    * 这里把它们聚出来，一键跳过，母体自动前进到下一个重复日。
    */
   const overdueRepeats = useMemo(() => {
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const keyOf = (ts: number) => {
-      const d = new Date(ts);
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    };
-    const todayStart = new Date(`${todayKey}T00:00:00`).getTime();
-    const skipped = new Set(
-      snapshot.exceptions.filter((e) => e.kind === 'deleted').map((e) => `${e.seriesId}@${e.originalStart}`),
-    );
-    const out: { key: string; task: Task; originalStart: number; dateText: string }[] = [];
+    const d0 = new Date();
+    d0.setHours(0, 0, 0, 0);
+    const todayStart = d0.getTime();
+    const out: { key: string; task: Task; dateText: string }[] = [];
     for (const task of snapshot.tasks) {
       if (!task.rrule || task.completedAt !== null || task.deletedAt !== null) continue;
-      const anchor = task.startAt ?? (task.dueDate ? new Date(`${task.dueDate}T00:00:00`).getTime() : null);
-      if (anchor === null) continue;
-      // 固定回看 90 天：
-      // 不能用 0（远古实例会占满 limit）；
-      // 也不能用 createdAt —— 任务日期可能早于创建时间（补录/改过日期），
-      // from 落在实例之后就会把它整个排除掉。
-      const from = todayStart - 90 * 86_400_000;
-      const occurrences = expandSeries(
-        {
-          id: task.id,
-          title: task.title,
-          startAt: anchor,
-          endAt: task.endAt,
-          allDay: task.allDay,
-          rrule: task.rrule,
-          exceptions: snapshot.exceptions.filter((e) => e.seriesId === task.id),
-          kind: 'task',
-          origin: null,
-        },
-        from,
-        todayStart,
-        200,
-      );
-      for (const occ of occurrences) {
-        if (occ.start >= todayStart) continue;
-        const key = `${task.id}@${occ.originalStart}`;
-        if (skipped.has(key)) continue;
-        out.push({ key, task, originalStart: occ.originalStart, dateText: formatDateLabel(keyOf(occ.start)) });
-      }
+      // 判据看母体自己的日期：日期周一、规则「每周三五日」的任务，
+      // 展开结果里没有周一，但列表显示的就是这条，用户看到它就是逾期
+      const byDue = task.dueDate !== null && task.dueDate < todayKey;
+      const byStart = task.startAt !== null && task.startAt < todayStart;
+      if (!byDue && !byStart) continue;
+      const dateText = task.dueDate ? formatDateLabel(task.dueDate) : '';
+      out.push({ key: task.id, task, dateText });
     }
     return out;
-  }, [snapshot.tasks, snapshot.exceptions, todayKey]);
+  }, [snapshot.tasks, todayKey]);
 
   async function skipAllOverdue() {
-    // 每个任务只推进一次：推进的目标是"now 之后的下一次"，
-    // 逐条调用会连着推好几次，直接跳过好几周
-    const seen = new Set<string>();
     for (const item of overdueRepeats) {
-      if (seen.has(item.task.id)) continue;
-      seen.add(item.task.id);
-      await skipOccurrence(item.task.id, item.originalStart);
+      await skipOccurrence(item.task.id, item.task.startAt ?? Date.now());
     }
   }
 
@@ -352,7 +319,7 @@ export default function ListScreen() {
       {viewMode === 'list' && overdueRepeats.length > 0 ? (
         <View style={styles.overdueBar}>
           <Text style={styles.overdueText}>
-            {overdueRepeats.length} 个过期的重复实例，最久 {overdueRepeats[0]?.dateText}
+            {overdueRepeats.length} 个重复任务已逾期{overdueRepeats[0]?.dateText ? `，最早 ${overdueRepeats[0].dateText}` : ""}
           </Text>
           <Pressable
             onPress={() => void skipAllOverdue()}
