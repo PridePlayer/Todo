@@ -102,6 +102,8 @@ interface AppState {
   deleteHabit: (id: string) => Promise<void>;
   /** 跳过重复任务的某一次（写一条 deleted 例外，该次不再出现） */
   skipOccurrence: (seriesId: string, originalStart: number) => Promise<void>;
+  flash: string | null;
+  showFlash: (text: string) => void;
   deleteTask: (id: string) => Promise<void>;
   ensureTag: (name: string) => Promise<Tag>;
   checkHabit: (habitId: string, logDate: string, delta: number) => Promise<void>;
@@ -204,6 +206,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // 同一时刻只允许一个 flush 在飞：并发 push 会让同一条 op 被提交两次，
   // 服务端虽然有 opId 幂等，但客户端两边的 rev 更新会互相覆盖
   const flushing = useRef(false);
+
+  /**
+   * 全局一次性提示。
+   *
+   * 为什么放在 store 而不是各页面：勾选操作的反馈在今日页、列表页、四象限
+   * 都要有，重复实现三遍必然漏；而且失败信息（异常被吞）只有集中处理
+   * 才不会又变成"点了没反应"。
+   */
+  const [flash, setFlash] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showFlash = useCallback((text: string) => {
+    setFlash(text);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(null), 2400);
+  }, []);
 
   const reload = useCallback(async () => {
     const rows = await loadAll();
@@ -336,8 +353,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleTask = useCallback(async (id: string) => {
-    const task = snapshot.tasks.find((t) => t.id === id);
-    if (!task) return;
+   const task = snapshot.tasks.find((t) => t.id === id);
+   if (!task) return;
+   try {
     const device = await ensureDeviceId();
 
     // 重复任务勾选完成 ≠ 终态。
@@ -365,6 +383,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
         setSnapshot((prev) => ({ ...prev, tasks: prev.tasks.map((t) => (t.id === id ? next : t)) }));
         setPending((n) => n + 1);
+        showFlash(`已跳到 ${patch.dueDate ?? '下一次'}（重复任务不会整条消失）`);
         void refresh();
         return;
       }
@@ -392,7 +411,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
     setPending((n) => n + 1);
     void refresh();
-  }, [refresh, snapshot.tasks]);
+   } catch (err) {
+     // 以前这里是 void Promise，异常被静默吞掉，界面表现就是"点了没反应"
+     console.warn('[toggle]', err);
+     showFlash(`操作失败：${err instanceof Error ? err.message : String(err)}`);
+   }
+  }, [refresh, snapshot.tasks, showFlash]);
 
   const createTask = useCallback(async (input: NewTaskInput) => {
     const trimmed = input.title.trim();
@@ -818,6 +842,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       archiveHabit,
       deleteHabit,
       skipOccurrence,
+      flash,
+      showFlash,
       deleteTask,
       ensureTag,
       checkHabit,
@@ -844,6 +870,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       archiveHabit,
       deleteHabit,
       skipOccurrence,
+      flash,
+      showFlash,
       deleteTask,
       ensureTag,
       checkHabit,

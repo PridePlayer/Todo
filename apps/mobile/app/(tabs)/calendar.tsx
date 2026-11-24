@@ -6,7 +6,8 @@ import { useApp } from '../../src/store';
 import { C, FONT, HIT, SP } from '../../src/theme';
 
 const DAY = 86_400_000;
-const HORIZON = 21;
+const HORIZON = 30;
+const LOOKBACK = 7;
 const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
 
 function dayStart(ts: number): number {
@@ -50,8 +51,10 @@ export default function CalendarScreen() {
   const { snapshot } = useApp();
 
   const groups = useMemo(() => {
-    const from = dayStart(Date.now());
-    const to = addDays(from, HORIZON);
+    // 往前留 7 天：Outlook 里的会议常常是已发生的，只显示未来会导致
+    // "明明同步了却什么都没看到"
+    const from = addDays(dayStart(Date.now()), -LOOKBACK);
+    const to = addDays(from, HORIZON + LOOKBACK);
     const rows: Row[] = [];
 
     for (const ev of snapshot.events) {
@@ -142,7 +145,7 @@ export default function CalendarScreen() {
       <View style={styles.head}>
         <Text style={styles.title}>日历</Text>
         <Text style={styles.sub}>
-          未来 {HORIZON} 天 · 事件来自 Outlook，只读
+          近 {LOOKBACK} 天到未来 {HORIZON} 天 · 共 {snapshot.events.length} 个 Outlook 事件
         </Text>
       </View>
 
@@ -154,7 +157,9 @@ export default function CalendarScreen() {
           <View>
             <Text style={styles.emptyTitle}>这段时间没有安排</Text>
             <Text style={styles.emptyHint}>
-              Outlook 里的安排会自动同步过来；也可以在「今日」里建一条带日期的待办。
+              {snapshot.events.length === 0
+                ? '本机还没有任何 Outlook 事件。Outlook 是在网页版「设置 · 日历」里连接的，手机端只负责同步下来 —— 先去网页版确认能看到日历，再回「设置」点「立即同步」。'
+                : `本机有 ${snapshot.events.length} 个 Outlook 事件，但都不在这个时间窗口内。`}
             </Text>
           </View>
         }

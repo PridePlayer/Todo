@@ -63,6 +63,32 @@ export function AllTasksView() {
   const quickRef = useRef<HTMLInputElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const { entry, push, undo } = useUndo();
+  // 重复任务勾选后整条不会变灰（只把日期推后），没有任何提示的话
+  // 看起来就是"点了没反应"。失败也必须可见 —— 之前用 void 吞掉了异常
+  const [flash, setFlash] = useState<string | null>(null);
+  const flashTimer = useRef<number | null>(null);
+  const showFlash = useCallback((text: string) => {
+    setFlash(text);
+    if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(null), 2200);
+  }, []);
+
+  const toggle = useCallback(
+    async (task: Task) => {
+      try {
+        const next = await repo.toggleComplete(task.id);
+        if (task.rrule !== null && next.completedAt === null) {
+          showFlash(`已跳到 ${next.dueDate ?? '下一次'}（重复任务不会整条消失）`);
+        } else {
+          showFlash(next.completedAt === null ? '已取消完成' : '已完成');
+        }
+      } catch (err) {
+        console.error('[toggle]', err);
+        showFlash(`操作失败：${err instanceof Error ? err.message : String(err)}`);
+      }
+    },
+    [showFlash],
+  );
   const exceptions = useExceptions();
 
   const alive = useMemo(() => (tasks ?? []).filter((task) => task.deletedAt === null), [tasks]);
@@ -425,7 +451,7 @@ export function AllTasksView() {
               collapsed={row.collapsed}
               draggable
               badge={<span className={styles.quad}>{QUADRANT_META[row.task.quadrant].no}</span>}
-              onToggle={() => void repo.toggleComplete(row.task.id)}
+              onToggle={() => void toggle(row.task)}
               onOpen={() => {
                 setSelectedId(row.task.id);
                 setDrawerId(row.task.id);
@@ -463,7 +489,10 @@ export function AllTasksView() {
             onClose={() => setDrawerId(null)}
             onPatch={(patch: TaskPatch) => repo.patch(drawerTask.id, patch).then(() => undefined)}
             onDelete={() => void remove(drawerTask)}
-            onToggle={(id) => void repo.toggleComplete(id)}
+            onToggle={(id) => {
+              const target = alive.find((t) => t.id === id);
+              if (target) void toggle(target);
+            }}
             onCreateChild={(title, parentId) =>
               repo.create({ title, parentId }).then(() => undefined)
             }
@@ -487,6 +516,11 @@ export function AllTasksView() {
       </div>
 
       {entry ? <Toast entry={entry} onUndo={() => void undo()} /> : null}
+      {flash ? (
+        <div className={styles.flash} role="status" aria-live="polite">
+          {flash}
+        </div>
+      ) : null}
     </div>
   );
 }

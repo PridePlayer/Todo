@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Fab } from '../../src/components/Fab';
 import { useApp } from '../../src/store';
@@ -23,8 +23,23 @@ const TAB_TITLE: Record<string, string> = {
   habits: '打卡',
 };
 
+const styles = StyleSheet.create({
+  flash: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    // 浮在 tab 栏之上，又不挡内容
+    bottom: 96,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 2,
+    backgroundColor: C.n900,
+  },
+  flashText: { color: C.n0, fontSize: FONT.sm, textAlign: 'center' },
+});
+
 export default function TabsLayout() {
-  const { ready, auth } = useApp();
+  const { ready, auth, flash } = useApp();
   // Android 手势导航条会盖住 tab 文字、吃掉可点区域，必须留出高度
   const insets = useSafeAreaInsets();
 
@@ -78,6 +93,11 @@ export default function TabsLayout() {
       ))}
     </Tabs>
       <Fab />
+      {flash ? (
+        <View style={styles.flash} pointerEvents="none">
+          <Text style={styles.flashText}>{flash}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }

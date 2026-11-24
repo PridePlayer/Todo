@@ -247,3 +247,29 @@
     display: contents;
   }
 }
+
+/* 一次性提示：勾选后的结果反馈，2.2 秒自动消失 */
+.flash {
+  position: fixed;
+  left: 50%;
+  bottom: 88px;
+  transform: translateX(-50%);
+  padding: var(--sp-2) var(--sp-4);
+  background: var(--n-900);
+  color: var(--n-0);
+  font-size: var(--t-sm);
+  border-radius: var(--r-sm);
+  animation: flashIn 160ms ease-out;
+  z-index: 50;
+}
+
+@keyframes flashIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
