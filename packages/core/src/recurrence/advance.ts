@@ -36,6 +36,7 @@ export function nextOccurrencePatch(
 ): AdvancePatch | null {
   if (!task.rrule) return null;
 
+  try {
   const anchor =
     task.startAt ?? (task.dueDate ? new Date(`${task.dueDate}T09:00:00`).getTime() : null);
   if (anchor === null) return null;
@@ -72,4 +73,10 @@ export function nextOccurrencePatch(
     endAt: hasTime && duration !== null ? next.start + duration : null,
     allDay: !hasTime,
   };
+  } catch {
+    // 规则非法（历史数据、手改过的 RRULE）时不要抛：
+    // 调用方是"勾选完成"，抛出去会让整次点击失效，界面看起来完全没反应。
+    // 返回 null 表示"不推进"，落到普通完成逻辑，至少这次勾选是生效的。
+    return null;
+  }
 }

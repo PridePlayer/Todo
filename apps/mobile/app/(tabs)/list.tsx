@@ -414,9 +414,16 @@ export default function ListScreen() {
                 <View key={task.id} style={styles.row}>
                   <Pressable
                     onPress={() => {
-                      // 勾选后行会移到「已完成」，没有过渡的话是瞬间跳变，看着像闪了一下
-                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                      void toggleTask(task.id);
+                      // 动画必须单独兜住：Fabric 下 configureNext 可能抛错，
+                      // 一旦抛在 toggleTask 前面，点击就彻底没反应了（踩过）
+                      try {
+                        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                      } catch {
+                        /* 动画失败不影响功能 */
+                      }
+                      toggleTask(task.id).catch((err: unknown) => {
+                        console.warn('[toggle]', err);
+                      });
                     }}
                     hitSlop={8}
                     style={styles.check}

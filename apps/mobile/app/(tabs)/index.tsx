@@ -189,8 +189,14 @@ export default function TodayScreen() {
               <Row
                 task={item.task}
                 onToggle={() => {
-                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                  void toggleTask(item.task.id);
+                  try {
+                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  } catch {
+                    /* 动画失败不影响功能 */
+                  }
+                  toggleTask(item.task.id).catch((err: unknown) => {
+                    console.warn('[toggle]', err);
+                  });
                 }}
               />
             )
