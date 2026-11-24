@@ -1,4 +1,4 @@
-import type { CalEvent, CalendarSource, Habit, HabitLog, Tag, Task, TaskList } from '@grid/core';
+import type { CalEvent, CalendarSource, Habit, HabitLog, RecurException, Tag, Task, TaskList } from '@grid/core';
 import { liveQuery } from 'dexie';
 import { useEffect, useState } from 'react';
 import { db } from '../db/dexie';
@@ -57,6 +57,24 @@ export function useSources(): CalendarSource[] {
     ).subscribe({
       next: (items) => setRows(items.sort((a, b) => a.sortOrder - b.sortOrder)),
       error: (err: unknown) => console.error('[liveQuery:sources]', err),
+    });
+    return () => sub.unsubscribe();
+  }, []);
+
+  return rows;
+}
+
+/**
+ * 重复事件的例外（跳过/改期）。
+ * 批量跳过重复实例时要靠它判断"这一次是不是已经跳过了"。
+ */
+export function useExceptions(): RecurException[] {
+  const [rows, setRows] = useState<RecurException[]>([]);
+
+  useEffect(() => {
+    const sub = liveQuery(() => db.exceptions.filter((r) => r.deletedAt === null).toArray()).subscribe({
+      next: setRows,
+      error: (err: unknown) => console.error('[liveQuery:exceptions]', err),
     });
     return () => sub.unsubscribe();
   }, []);

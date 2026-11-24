@@ -5,7 +5,8 @@
   grid-template-columns: minmax(0, 1fr) auto;
   /* 四行：标题 / 标签条 / 新增条 / 列表。标签条单独一行而不是塞进标题区，
      是因为标签数量不可控，塞进去会把搜索框挤到换行 */
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  /* 六行：标题 / 标签 / 日期 / 过期提示 / 新增条 / 列表。提示条不渲染时该行塌成 0 */
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
 }
 
 .head {
@@ -163,14 +164,47 @@
   color: var(--a-600);
 }
 
-.quickSlot {
+.overdueBar {
   grid-column: 1;
   grid-row: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin: 0 var(--sp-4) var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 2px solid var(--warn);
+  background: var(--n-50);
+  font-size: var(--t-sm);
+  color: var(--n-700);
+}
+
+.overdueBtn {
+  flex: none;
+  height: 26px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--warn);
+  border-radius: var(--r-sm);
+  background: var(--n-0);
+  color: var(--warn);
+  font-size: var(--t-sm);
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.overdueBtn:hover {
+  background: var(--warn);
+  color: var(--n-0);
+}
+
+.quickSlot {
+  grid-column: 1;
+  grid-row: 5;
 }
 
 .list {
   grid-column: 1;
-  grid-row: 5;
+  grid-row: 6;
   min-height: 0;
   border-top: var(--line);
 }

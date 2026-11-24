@@ -1,6 +1,8 @@
 import {
   QUADRANT_META,
   compareTasks,
+  expandSeries,
+  formatDateLabel,
   isOverdue,
   type Quadrant,
   type Task,
@@ -15,7 +17,7 @@ import { Toast } from '../components/Toast';
 import { VirtualList } from '../components/VirtualList';
 import { repo } from '../db/repo';
 import { useHotkeys } from '../hooks/useHotkeys';
-import { useTags, useTasks } from '../hooks/useStore';
+import { useExceptions, useTags, useTasks } from '../hooks/useStore';
 import { useUndo } from '../hooks/useUndo';
 import styles from './AllTasks.module.css';
 
@@ -61,6 +63,7 @@ export function AllTasksView() {
   const quickRef = useRef<HTMLInputElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const { entry, push, undo } = useUndo();
+  const exceptions = useExceptions();
 
   const alive = useMemo(() => (tasks ?? []).filter((task) => task.deletedAt === null), [tasks]);
 
@@ -74,6 +77,63 @@ export function AllTasksView() {
     for (const bucket of map.values()) bucket.sort(compareTasks);
     return map;
   }, [alive]);
+
+  /**
+   * 过期但还挂着的重复实例。
+   * 列表显示的是母体、不展开实例，所以这些"上周一那次"平时看不见，
+   * 只有把实例摊出来才知道该跳过几次。
+   */
+  const overdueRepeats = useMemo(() => {
+    const d0 = new Date();
+    d0.setHours(0, 0, 0, 0);
+    const todayStart = d0.getTime();
+    const keyOf = (ts: number) => {
+      const d = new Date(ts);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const skipped = new Set(
+      exceptions.filter((e) => e.kind === 'deleted').map((e) => `${e.seriesId}@${e.originalStart}`),
+    );
+    const out: { key: string; task: Task; originalStart: number; dateText: string }[] = [];
+    for (const task of alive) {
+      if (!task.rrule || task.completedAt !== null) continue;
+      const anchor = task.startAt ?? (task.dueDate ? new Date(`${task.dueDate}T00:00:00`).getTime() : null);
+      if (anchor === null) continue;
+      const occurrences = expandSeries(
+        {
+          id: task.id,
+          title: task.title,
+          startAt: anchor,
+          endAt: task.endAt,
+          allDay: task.allDay,
+          rrule: task.rrule,
+          exceptions: exceptions.filter((e) => e.seriesId === task.id),
+          kind: 'task',
+          origin: null,
+        },
+        0,
+        todayStart,
+        60,
+      );
+      for (const occ of occurrences) {
+        if (occ.start >= todayStart) continue;
+        const key = `${task.id}@${occ.originalStart}`;
+        if (skipped.has(key)) continue;
+        out.push({ key, task, originalStart: occ.originalStart, dateText: formatDateLabel(keyOf(occ.start)) });
+      }
+    }
+    return out;
+  }, [alive, exceptions]);
+
+  const skipAllOverdue = useCallback(async () => {
+    // 每个任务只推进一次：目标是 now 之后的下一次，逐条调用会跳过好几周
+    const seen = new Set<string>();
+    for (const item of overdueRepeats) {
+      if (seen.has(item.task.id)) continue;
+      seen.add(item.task.id);
+      await repo.skipOccurrence(item.task.id, item.originalStart);
+    }
+  }, [overdueRepeats]);
 
   const stats = useMemo(() => {
     const open = alive.filter((task) => task.completedAt === null);
@@ -340,6 +400,17 @@ export function AllTasksView() {
               #{tag.name}
             </button>
           ))}
+        </div>
+      ) : null}
+
+      {overdueRepeats.length > 0 ? (
+        <div className={styles.overdueBar}>
+          <span>
+            {overdueRepeats.length} 个过期的重复实例，最久 {overdueRepeats[0]?.dateText}
+          </span>
+          <button type="button" className={styles.overdueBtn} onClick={() => void skipAllOverdue()}>
+            全部跳过
+          </button>
         </div>
       ) : null}
 
