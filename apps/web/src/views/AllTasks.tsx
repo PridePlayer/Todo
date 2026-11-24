@@ -111,6 +111,13 @@ export function AllTasksView() {
     const tagOk = (task: Task) => tagFilter === null || task.tagIds.includes(tagFilter);
     const dateOk = (task: Task) => {
       if (dateFilter === null) return true;
+      if (dateFilter === 'overdue') {
+        // 过期 = 有截止日、早于今天、还没完成
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const d = new Date();
+        const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        return task.completedAt === null && task.dueDate !== null && task.dueDate < today;
+      }
       if (task.dueDate === dateFilter) return true;
       if (task.startAt !== null) {
         const d = new Date(task.startAt);
@@ -254,6 +261,15 @@ export function AllTasksView() {
                 onClick={() => setDateFilter(null)}
               >
                 全部日期
+              </button>
+              <button
+                type="button"
+                className={styles.dateChip}
+                data-on={dateFilter === 'overdue'}
+                aria-pressed={dateFilter === 'overdue'}
+                onClick={() => setDateFilter(dateFilter === 'overdue' ? null : 'overdue')}
+              >
+                已过期
               </button>
               <button
                 type="button"
