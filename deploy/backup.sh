@@ -126,7 +126,13 @@ else
   DB_NAME="${HOSTPART#*/}"
   DB_HOST="${HOSTPORT%%:*}"
   DB_PORT="${HOSTPORT#*:}"
-  [[ "$DB_PORT" == "$DB_HOSTPORT" || -z "$DB_PORT" ]] && DB_PORT=3306
+  # URL 里没写端口时，`${HOSTPORT#*:}` 找不到冒号会原样返回主机名，
+  # 这时候才该退到 3306。用 if 而不是 `[[ ]] &&`：后者在 set -u 下
+  # 一旦手滑写错变量名，报的是 "unbound variable" 而不是"端口取错了"，
+  # 排查成本差很远。
+  if [[ -z "$DB_PORT" || "$DB_PORT" == "$HOSTPORT" ]]; then
+    DB_PORT=3306
+  fi
   # URL 编码过的密码要还原，否则含 @ / # 的密码连不上（而报错是"Access denied"，
   # 看起来像密码错了，实际是没解码）
   DB_USER="$(printf '%b' "${DB_USER//%/\\x}")"
@@ -161,8 +167,18 @@ else
     || fail "dump 没有结束标记（可能中途断开）：$TARGET"
 fi
 
+# 体积按**解压后**算，不按 .gz 算。
+# dump 的压缩率跟内容重复度强相关：一个刚建好、只有几条数据的库，
+# gzip 后可能只有几百字节，按压缩后判断会把完全正常的备份判成"不完整"，
+# 而这种误报的代价很高——人会开始不信备份脚本。
+if [[ "$TARGET" == *.gz ]]; then
+  RAW_BYTES=$(gzip -dc "$TARGET" | wc -c)
+else
+  RAW_BYTES=$(stat -c %s "$TARGET")
+fi
 SIZE=$(stat -c %s "$TARGET")
-[[ "$SIZE" -ge "$MIN_BYTES" ]] || fail "备份文件只有 ${SIZE} 字节，明显不完整：$TARGET"
+[[ "$RAW_BYTES" -ge "$MIN_BYTES" ]] \
+  || fail "备份解压后只有 ${RAW_BYTES} 字节（压缩后 ${SIZE}），明显不完整：$TARGET"
 
 # 周日额外留一份周备份
 if [[ "$(date +%u)" == "7" ]]; then
@@ -191,7 +207,16 @@ else
   log "跳过云同步（未配置 rclone 的 oss: 远端）"
 fi
 
+# 人话体积。不用 numfmt：最小化的 CentOS/宝塔环境里它可能不存在，
+# 而且它对小于 1K 的值不输出单位，日志里出现一个光秃秃的 "411" 等于没说。
+human_size() {
+  awk -v b="$1" 'BEGIN {
+    split("B KB MB GB TB", u, " "); i = 1;
+    while (b >= 1024 && i < 5) { b /= 1024; i++ }
+    printf (i == 1 ? "%d%s" : "%.1f%s"), b, u[i];
+  }'
+}
+
 printf 'OK %s %s %s\n' "$(date +%s)" "$(basename "$TARGET")" "$SIZE" > "$STATE_FILE"
-human="$(numfmt --to=iec "$SIZE" 2>/dev/null || printf '%sB' "$SIZE")"
-log "完成：$(basename "$TARGET") $human，本机共 $(ls -1 "$BACKUP_DIR/daily" | wc -l) 份"
-notify "成功 - $(basename "$TARGET") $human"
+log "完成：$(basename "$TARGET")　解压后 $(human_size "$RAW_BYTES") / 落盘 $(human_size "$SIZE")，本机共 $(ls -1 "$BACKUP_DIR/daily" | wc -l) 份"
+notify "成功 - $(basename "$TARGET") $(human_size "$RAW_BYTES")"

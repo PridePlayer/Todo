@@ -148,7 +148,10 @@ else
   DB_NAME="${HOSTPART#*/}"
   DB_HOST="${HOSTPORT%%:*}"
   DB_PORT="${HOSTPORT#*:}"
-  [[ "$DB_PORT" == "$DB_HOSTPORT" || -z "$DB_PORT" ]] && DB_PORT=3306
+  # URL 没写端口时 `${HOSTPORT#*:}` 找不到冒号会原样返回主机名，这时才退到 3306。
+  if [[ -z "$DB_PORT" || "$DB_PORT" == "$HOSTPORT" ]]; then
+    DB_PORT=3306
+  fi
   DB_USER="$(printf '%b' "${DB_USER//%/\\x}")"
   DB_PASS="$(printf '%b' "${DB_PASS//%/\\x}")"
 
