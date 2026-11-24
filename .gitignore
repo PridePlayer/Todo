@@ -14,3 +14,6 @@ Thumbs.db
 /.workbuddy/
 /.vscode/*
 !/.vscode/extensions.json
+
+# 打包验证的临时产物（每轮 expo export 会生成一个，几十 MB）
+.export-check-*/
