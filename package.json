@@ -22,6 +22,6 @@
     "mobile": "node tools/mobile-start.mjs",
     "mobile:check": "pnpm --filter @grid/mobile typecheck",
     "mobile:start": "node tools/mobile-start.mjs",
-    "postinstall": "pnpm --filter @grid/core build"
+    "postinstall": "node packages/core/node_modules/typescript/lib/tsc.js -p packages/core/tsconfig.build.json"
   }
 }
