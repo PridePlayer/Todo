@@ -213,6 +213,8 @@ export {
   type RrulePreset,
 } from './recurrence/rrule.js';
 
+export { nextOccurrencePatch, type AdvancePatch } from './recurrence/advance.js';
+
 export {
   expandSeries,
   expandTasks,

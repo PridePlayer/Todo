@@ -3,14 +3,21 @@ import { useMemo, useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
+  LayoutAnimation,
   Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   TextInput,
+  UIManager,
   View,
 } from 'react-native';
+
+// Android 的布局动画默认关闭
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -110,7 +117,15 @@ export default function TodayScreen() {
               <Text style={styles.emptyHint}>在下面输入框写点什么，回车即存</Text>
             </View>
           }
-          renderItem={({ item }) => <Row task={item} onToggle={() => void toggleTask(item.id)} />}
+          renderItem={({ item }) => (
+            <Row
+              task={item}
+              onToggle={() => {
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                void toggleTask(item.id);
+              }}
+            />
+          )}
         />
 
         <View style={styles.composer}>

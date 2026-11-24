@@ -4,6 +4,7 @@ import {
   habitLogSchema,
   habitSchema,
   listSchema,
+  nextOccurrencePatch,
   quadrantOf,
   recurExceptionSchema,
   tagSchema,
@@ -328,8 +329,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const toggleTask = useCallback(async (id: string) => {
     const task = snapshot.tasks.find((t) => t.id === id);
     if (!task) return;
-    const nextCompleted = task.completedAt === null ? Date.now() : null;
     const device = await ensureDeviceId();
+
+    // 重复任务勾选完成 ≠ 终态。
+    // 直接把 completedAt 写死会让整条记录从列表里消失，用户再也看不到下一次；
+    // 正确语义是"这一次做完了，母体滚到下一个重复日"。
+    if (task.rrule !== null && task.completedAt === null) {
+      const patch = nextOccurrencePatch(task, snapshot.exceptions);
+      if (patch !== null) {
+        const next: Task = { ...task, ...patch, updatedAt: Date.now() };
+        await putRow('task', id, task.rev, next as unknown as Record<string, unknown>);
+        await queueOp({
+          opId: ulid(),
+          table: 'task',
+          action: 'update',
+          id,
+          baseRev: task.rev,
+          fields: patch as unknown as Record<string, unknown>,
+          base: {
+            dueDate: task.dueDate,
+            startAt: task.startAt,
+            endAt: task.endAt,
+            allDay: task.allDay,
+          },
+          hlc: nextHlc(device),
+        });
+        setSnapshot((prev) => ({ ...prev, tasks: prev.tasks.map((t) => (t.id === id ? next : t)) }));
+        setPending((n) => n + 1);
+        void refresh();
+        return;
+      }
+      // 规则已经结束（COUNT 用完 / 超过 UNTIL）→ 落到下面的普通完成逻辑
+    }
+
+    const nextCompleted = task.completedAt === null ? Date.now() : null;
     const payload = { ...task, completedAt: nextCompleted };
     // rev 不动：本地 rev 必须始终等于"服务端已知版本"，
     // 自己 +1 会让下一次 push 的 baseRev 高于服务端，永远冲突
@@ -534,11 +567,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
         fields: exc as unknown as Record<string, unknown>,
         hlc: nextHlc(device),
       });
+      // 光写例外还不够：列表显示的是母体，不展开实例，
+      // 例外只会影响 Web 的展开视图，手机上看不到任何变化。
+      // 必须同时把母体推进到下一个重复日，用户才会真的"跳到下一次"。
+      const task = snapshot.tasks.find((t) => t.id === seriesId);
+      if (task && task.rrule !== null) {
+        const patch = nextOccurrencePatch(task, [...snapshot.exceptions, exc], now);
+        if (patch !== null) {
+          const next: Task = { ...task, ...patch, updatedAt: now };
+          await putRow('task', task.id, task.rev, next as unknown as Record<string, unknown>);
+          await queueOp({
+            opId: ulid(),
+            table: 'task',
+            action: 'update',
+            id: task.id,
+            baseRev: task.rev,
+            fields: patch as unknown as Record<string, unknown>,
+            base: {
+              dueDate: task.dueDate,
+              startAt: task.startAt,
+              endAt: task.endAt,
+              allDay: task.allDay,
+            },
+            hlc: nextHlc(device),
+          });
+          setSnapshot((prev) => ({
+            ...prev,
+            exceptions: [...prev.exceptions, exc],
+            tasks: prev.tasks.map((t) => (t.id === task.id ? next : t)),
+          }));
+          setPending((n) => n + 1);
+          void refresh();
+          return;
+        }
+      }
+
       setSnapshot((prev) => ({ ...prev, exceptions: [...prev.exceptions, exc] }));
       setPending((n) => n + 1);
       void refresh();
     },
-    [refresh, snapshot.exceptions],
+    [refresh, snapshot.exceptions, snapshot.tasks],
   );
 
   /**

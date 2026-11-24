@@ -4,6 +4,7 @@ import {
   expandSeries,
   flagsOf,
   newTaskSchema,
+  nextOccurrencePatch,
   parseRrule,
   planAll,
   planSkip,
@@ -395,6 +396,21 @@ export class LocalTaskStore implements TaskStore {
     const task = (await db.tasks.get(id)) ?? null;
     if (!task) throw new Error('任务不存在');
 
+    // 重复任务：勾选完成 = 这一次做完了，母体滚到下一个重复日。
+    // 直接设 completedAt 会让整条记录从所有视图里消失，用户再也看不到下一次。
+    if (task.rrule !== null && task.completedAt === null) {
+      const exceptions = await db.exceptions.where('seriesId').equals(id).toArray();
+      const patch = nextOccurrencePatch(task, exceptions);
+      if (patch !== null) {
+        return this.patch(id, {
+          dueDate: patch.dueDate,
+          startAt: patch.startAt,
+          endAt: patch.endAt,
+        });
+      }
+      // 规则已结束 → 落到普通完成逻辑
+    }
+
     const subtree = await subtreeOf(task);
     const target = task.completedAt === null ? nowMs() : null;
     const t = nowMs();
@@ -641,6 +657,22 @@ export class LocalTaskStore implements TaskStore {
   /** 删除某一次（仅本次）：写一条 kind='deleted' 的例外，母体不动 */
   async skipOccurrence(seriesId: string, originalStart: number): Promise<void> {
     await this.upsertException(planSkip(seriesId, originalStart));
+
+    // 只写例外不够：列表和甘特显示的是母体，不展开实例，
+    // 例外只影响展开视图，用户点完"跳过"看不到任何变化。
+    // 同时把母体推到下一个重复日，"跳到下一次"才真的发生。
+    const task = await db.tasks.get(seriesId);
+    if (task && task.rrule !== null) {
+      const exceptions = await db.exceptions.where('seriesId').equals(seriesId).toArray();
+      const patch = nextOccurrencePatch(task, exceptions);
+      if (patch !== null) {
+        await this.patch(seriesId, {
+          dueDate: patch.dueDate,
+          startAt: patch.startAt,
+          endAt: patch.endAt,
+        });
+      }
+    }
   }
 
   private async upsertException(draft: ExceptionDraft): Promise<RecurException> {

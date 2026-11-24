@@ -1,6 +1,11 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, LayoutAnimation, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, UIManager, View } from 'react-native';
+
+// Android 上布局动画默认关闭，得显式打开；iOS 天生可用
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { describeRrule, expandSeries, formatDateLabel, type Task } from '@grid/core';
 import { GanttChart, type GanttItem } from '../../src/components/GanttChart';
@@ -153,7 +158,12 @@ export default function ListScreen() {
   }, [snapshot.tasks, snapshot.exceptions, todayKey]);
 
   async function skipAllOverdue() {
+    // 每个任务只推进一次：推进的目标是"now 之后的下一次"，
+    // 逐条调用会连着推好几次，直接跳过好几周
+    const seen = new Set<string>();
     for (const item of overdueRepeats) {
+      if (seen.has(item.task.id)) continue;
+      seen.add(item.task.id);
       await skipOccurrence(item.task.id, item.originalStart);
     }
   }
@@ -338,7 +348,11 @@ export default function ListScreen() {
               return (
                 <View key={task.id} style={styles.row}>
                   <Pressable
-                    onPress={() => void toggleTask(task.id)}
+                    onPress={() => {
+                      // 勾选后行会移到「已完成」，没有过渡的话是瞬间跳变，看着像闪了一下
+                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                      void toggleTask(task.id);
+                    }}
                     hitSlop={8}
                     style={styles.check}
                     accessibilityRole="checkbox"

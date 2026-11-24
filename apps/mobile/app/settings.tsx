@@ -72,8 +72,14 @@ export default function SettingsScreen() {
           </View>
           <Text style={styles.hint}>
             上次同步：{when(lastSyncAt)} · 本地 {snapshot.tasks.filter((t) => t.deletedAt === null).length} 条待办 /{' '}
-            {snapshot.logs.length} 条打卡记录
+            {snapshot.logs.length} 条打卡 / {snapshot.events.length} 个日程
           </Text>
+          {snapshot.events.length === 0 ? (
+            <Text style={styles.hint}>
+              还没有日程数据。Outlook 是在网页版里连接的（设置 → 日历），手机端只负责同步下来。
+              先在网页版确认能看到日历，再回来点「立即同步」。
+            </Text>
+          ) : null}
           {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
           <Pressable
             onPress={() => void refresh()}

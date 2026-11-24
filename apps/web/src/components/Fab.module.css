@@ -32,6 +32,7 @@
 }
 
 .card {
+  animation: cardIn 160ms cubic-bezier(0.22, 1, 0.36, 1);
   width: 360px;
   background: var(--n-0);
   border: var(--line);
@@ -156,4 +157,15 @@
 
 .primary:disabled {
   background: var(--n-300);
+}
+
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
