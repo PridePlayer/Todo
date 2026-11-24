@@ -149,11 +149,11 @@ export default function ListScreen() {
       if (!task.rrule || task.completedAt !== null || task.deletedAt !== null) continue;
       const anchor = task.startAt ?? (task.dueDate ? new Date(`${task.dueDate}T00:00:00`).getTime() : null);
       if (anchor === null) continue;
-      // from 必须是"任务创建以来"而不是 0：
-      // 从 1970 年展开的话，每周三五日一条就能产生几千个实例，
-      // limit 会被远古实例占满，最近的过期实例反而取不到 —— 表现就是
-      // "有的任务能跳过，有的怎么点都没反应"
-      const from = Math.max(task.createdAt, todayStart - 90 * 86_400_000);
+      // 固定回看 90 天：
+      // 不能用 0（远古实例会占满 limit）；
+      // 也不能用 createdAt —— 任务日期可能早于创建时间（补录/改过日期），
+      // from 落在实例之后就会把它整个排除掉。
+      const from = todayStart - 90 * 86_400_000;
       const occurrences = expandSeries(
         {
           id: task.id,

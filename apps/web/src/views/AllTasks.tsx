@@ -99,9 +99,11 @@ export function AllTasksView() {
       if (!task.rrule || task.completedAt !== null) continue;
       const anchor = task.startAt ?? (task.dueDate ? new Date(`${task.dueDate}T00:00:00`).getTime() : null);
       if (anchor === null) continue;
-      // from 取任务创建以来，不能是 0：从 1970 年展开会被远古实例占满 limit，
-      // 最近的过期实例取不到，界面表现为"有的能跳过、有的点不动"
-      const from = Math.max(task.createdAt, todayStart - 90 * 86_400_000);
+      // 固定回看 90 天。
+      // 不能用 0（从 1970 年展开会被远古实例占满 limit，最近的反而取不到）；
+      // 也不能用 createdAt —— 任务的日期可能早于创建时间（补录、改过日期），
+      // from 落在实例之后就会把它整个排除掉。回看窗口与任务何时创建无关，最稳。
+      const from = todayStart - 90 * 86_400_000;
       const occurrences = expandSeries(
         {
           id: task.id,
