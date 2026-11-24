@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "me.stellamp.grid",
-      "versionCode": 4,
+      "versionCode": 6,
       "predictiveBackGestureEnabled": false,
       "adaptiveIcon": {
         "backgroundColor": "#ffffff",

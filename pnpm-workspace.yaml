@@ -10,8 +10,8 @@ minimumReleaseAgeExclude:
   - multitars
   - node-forge
 
-# pnpm 10 默认不运行依赖的 install 脚本（防供应链攻击）。
-# esbuild 的脚本是下载平台二进制，必须放行，否则 install 直接以 1 退出。
-# 注意：package.json 的 pnpm 字段已不被读取（见 install 时的 WARN），只能写在这里。
-onlyBuiltDependencies:
+# pnpm 10 默认不运行依赖的 install 脚本（防供应链攻击），被忽略的包会让 install 以 1 退出。
+# esbuild 是 vite 的依赖（web 端用），移动端打包走 Metro，完全用不到它 ——
+# 所以这里明确"忽略"而不是"放行"：既让 install 通过，也不给它运行脚本的机会。
+ignoredBuiltDependencies:
   - esbuild
