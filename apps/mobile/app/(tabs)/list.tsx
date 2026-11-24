@@ -44,6 +44,26 @@ export default function ListScreen() {
   // 甘特是列表的另一种排布，不是独立 tab：底部一排已经 5 个，再加一格就多一次跨页跳转
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [sort, setSort] = useState<SortMode>('manual');
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  // 收起时用一行"已生效的筛选"代替四个筛选条，点一下就撤掉
+  const activeSummary = useMemo(() => {
+    const items: { key: string; label: string; clear: () => void }[] = [];
+    if (status !== 'open') items.push({ key: 'status', label: STATUS_LABEL[status], clear: () => setStatus('open') });
+    if (dateFilter !== null) {
+      const label = dateFilter === 'overdue' ? '已过期' : dateFilter === todayKey ? '今日' : dateFilter;
+      items.push({ key: 'date', label, clear: () => setDateFilter(null) });
+    }
+    if (sort !== 'manual') items.push({ key: 'sort', label: `按${SORT_LABEL[sort]}`, clear: () => setSort('manual') });
+    if (mode !== 'flat') items.push({ key: 'mode', label: '按标签分组', clear: () => setMode('flat') });
+    if (tagFilter !== null) {
+      const tag = snapshot.tags.find((t) => t.id === tagFilter);
+      items.push({ key: 'tag', label: tagFilter === NO_TAG ? '未分类' : `#${tag?.name ?? ''}`, clear: () => setTagFilter(null) });
+    }
+    return items;
+  }, [status, dateFilter, sort, mode, tagFilter, todayKey, snapshot.tags]);
+
+  const activeCount = activeSummary.length;
 
   const tagName = useMemo(() => {
     const map = new Map(snapshot.tags.map((tag) => [tag.id, tag.name]));
@@ -200,7 +220,7 @@ export default function ListScreen() {
         </View>
       </View>
 
-      <View style={styles.searchWrap}>
+      <View style={styles.searchRow}>
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -211,8 +231,22 @@ export default function ListScreen() {
           autoCorrect={false}
           clearButtonMode="while-editing"
         />
+        {/* 筛选项收起来：状态/日期/排序/标签四行常驻会吃掉半个屏幕，
+            列表本来就该是主角 */}
+        <Pressable
+          onPress={() => setFilterOpen((v) => !v)}
+          style={[styles.filterBtn, filterOpen && styles.filterBtnOn]}
+          accessibilityRole="button"
+          accessibilityLabel={filterOpen ? '收起筛选' : '展开筛选'}
+        >
+          <Text style={[styles.filterText, filterOpen && styles.filterTextOn]}>
+            {filterOpen ? '收起' : activeCount > 0 ? `筛选 ${activeCount}` : '筛选'}
+          </Text>
+        </Pressable>
       </View>
 
+      {filterOpen ? (
+        <>
       <View style={styles.statusRow}>
         {(['open', 'done', 'all'] as Status[]).map((key) => (
           <Pressable
@@ -315,6 +349,27 @@ export default function ListScreen() {
           <Text style={[styles.chipText, tagFilter === NO_TAG && styles.chipTextOn]}>未分类</Text>
         </Pressable>
       </ScrollView>
+        </>
+      ) : activeSummary.length > 0 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.dateScroll}
+          contentContainerStyle={styles.dateRow}
+        >
+          {activeSummary.map((item) => (
+            <Pressable
+              key={item.key}
+              onPress={item.clear}
+              style={styles.summaryChip}
+              accessibilityRole="button"
+              accessibilityLabel={`清除筛选：${item.label}`}
+            >
+              <Text style={styles.summaryText}>{item.label} ×</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
 
       {viewMode === 'list' && overdueRepeats.length > 0 ? (
         <View style={styles.overdueBar}>
@@ -443,8 +498,39 @@ const styles = StyleSheet.create({
   onText: { color: C.n0 },
   title: { fontSize: FONT.xl, color: C.n900, fontWeight: '600' },
   sub: { marginTop: SP[1], fontSize: FONT.base, color: C.n500 },
-  searchWrap: { paddingHorizontal: SP[4], paddingTop: SP[2], flexGrow: 0, flexShrink: 0 },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SP[2],
+    paddingHorizontal: SP[4],
+    paddingTop: SP[2],
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  filterBtn: {
+    height: 36,
+    paddingHorizontal: SP[3],
+    borderWidth: 1,
+    borderColor: C.n300,
+    borderRadius: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterBtnOn: { backgroundColor: C.n900, borderColor: C.n900 },
+  filterText: { fontSize: FONT.sm, color: C.n700 },
+  filterTextOn: { color: C.n0 },
+  summaryChip: {
+    height: 30,
+    paddingHorizontal: SP[2],
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: C.a500,
+    borderRadius: 2,
+    backgroundColor: C.a100,
+  },
+  summaryText: { fontSize: FONT.sm, color: C.a700 },
   search: {
+    flex: 1,
     minHeight: HIT,
     borderWidth: 1,
     borderColor: C.n300,
