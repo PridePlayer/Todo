@@ -1,3 +1,4 @@
+import * as Linking from 'expo-linking';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -113,6 +114,30 @@ export default function SettingsScreen() {
             accessibilityRole="button"
           >
             <Text style={styles.btnText}>保存地址</Text>
+          </Pressable>
+        </Section>
+
+        <Section label="数据备份">
+          <Text style={styles.value}>
+            本机 {snapshot.tasks.filter((t) => t.deletedAt === null).length} 条待办 · {snapshot.logs.length} 条打卡 ·{' '}
+            {snapshot.events.length} 个日程
+          </Text>
+          <Text style={styles.hint}>
+            服务器每 6 小时自动备份一次，本机留 14 天。那份备份是给「服务跑坏了」用的；
+            想防「服务器整个没了」，还需要你自己存一份导出文件。
+          </Text>
+          <Text style={styles.hint}>
+            导出要在网页版做——手机上的文件存不住，一不小心就被清理掉了。
+            点下面的按钮会打开浏览器，登录后到「设置 → 备份与导出」下载 JSON。
+          </Text>
+          <Pressable
+            onPress={() => void Linking.openURL(`${apiBase}/#settings`).catch(() => {
+              Alert.alert('打不开浏览器', `请手动在浏览器里访问 ${apiBase}/#settings`);
+            })}
+            style={({ pressed }) => [styles.btn, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.btnText}>在浏览器里导出</Text>
           </Pressable>
         </Section>
 

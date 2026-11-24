@@ -61,6 +61,20 @@ interface AppShellProps {
   onLogout: () => void;
 }
 
+/**
+ * 视图与 URL hash 同步。
+ *
+ * 没有引路由库——这些视图只是同一页面的不同面板，不需要嵌套路由、loader、代码分割。
+ * 但完全不留 URL 痕迹的代价是：手机端想指引用户「去网页设置页导出」时，
+ * 只能打开首页再让人自己找。锚点足够小，也足够解决这件事。
+ */
+const VIEW_KEYS = VIEWS.map((v) => v.key);
+
+function readHashView(): ViewKey {
+  const raw = window.location.hash.replace(/^#\/?/, '');
+  return (VIEW_KEYS as string[]).includes(raw) ? (raw as ViewKey) : 'all';
+}
+
 function todayLabel(): string {
   return new Intl.DateTimeFormat('zh-CN', {
     month: 'long',
@@ -107,7 +121,24 @@ function SyncPill() {
 }
 
 export function AppShell({ user, onLogout }: AppShellProps) {
-  const [view, setView] = useState<ViewKey>('all');
+  const [view, setViewState] = useState<ViewKey>(() => readHashView());
+
+  /**
+   * 切视图顺带改 hash。用 replaceState 而不是 pushState：
+   * 逐个视图点下去会往历史里塞十几条，浏览器「返回」就变成了在面板之间倒退，
+   * 而不是离开这个应用。
+   */
+  const setView = (next: ViewKey) => {
+    setViewState(next);
+    const target = `#${next}`;
+    if (window.location.hash !== target) window.history.replaceState(null, '', target);
+  };
+
+  useEffect(() => {
+    const onHashChange = () => setViewState(readHashView());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
   const status = useSyncStatus();
   const active = VIEWS.find((item) => item.key === view) ?? VIEWS[0]!;
 

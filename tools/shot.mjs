@@ -18,6 +18,15 @@ import { join } from 'node:path';
 const APP = process.env.APP_URL ?? 'http://localhost:5173/';
 const PORT = Number(process.env.CDP_PORT ?? 9333);
 const VIEW = process.env.VIEW ? Number(process.env.VIEW) : 0;
+
+// 本地开发库的登录口令，从环境变量读，不写进仓库——这个仓库是公开的。
+// 用法：GRID_TEST_PASSWORD=你的口令 node tools/shot.mjs calendar
+const TEST_EMAIL = process.env.GRID_TEST_EMAIL ?? 'me@example.com';
+const TEST_PASSWORD = process.env.GRID_TEST_PASSWORD;
+if (!TEST_PASSWORD) {
+  console.error('[shot] 需要 GRID_TEST_PASSWORD 环境变量（本地开发库的登录口令）');
+  process.exit(1);
+}
 const WHAT = process.argv[2] ?? 'calendar';
 
 const CANDIDATES = [
@@ -143,7 +152,7 @@ try {
     const res = await fetch('/api/auth/login', {
       method: 'POST', credentials: 'include',
       headers: { 'content-type': 'application/json', 'x-csrf-token': s.csrfToken },
-      body: JSON.stringify({ email: 'me@example.com', password: 'grid-dev-pass-2026' }),
+      body: JSON.stringify({ email: ${JSON.stringify(TEST_EMAIL)}, password: ${JSON.stringify(TEST_PASSWORD)} }),
     });
     const text = await res.text();
     return res.status + ' ' + text.slice(0, 200);

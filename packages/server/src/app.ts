@@ -8,6 +8,7 @@ import type { GraphTokens } from './graph/token.js';
 import { authRoutes } from './routes/auth.js';
 import { calendarRoutes } from './routes/calendar.js';
 import { deviceRoutes } from './routes/devices.js';
+import { exportRoutes } from './routes/export.js';
 import { habitRoutes } from './routes/habits.js';
 import { healthRoutes } from './routes/health.js';
 import { oauthRoutes } from './routes/oauth.js';
@@ -120,6 +121,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(calendarRoutes, { prefix: '/api', db, env, tokens: deps.tokens ?? null });
   await app.register(habitRoutes, { prefix: '/api', db, env });
   await app.register(deviceRoutes, { prefix: '/api', db, env });
+  await app.register(exportRoutes, { prefix: '/api', db, env });
 
   return app;
 }

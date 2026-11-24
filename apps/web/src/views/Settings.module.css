@@ -127,6 +127,34 @@
   cursor: not-allowed;
 }
 
+/* 左对齐的按钮组：用于区块内容里的动作，不跟着标题往右挤 */
+.actions {
+  margin-top: var(--sp-4);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+/*
+ * <a> 版 ghost 按钮。不能直接复用 .ghost：它在 <a> 上是 inline 元素，
+ * height 不生效，文字会顶着上边框；而且默认有下划线。
+ */
+.linkGhost {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-sm);
+  font-size: var(--t-sm);
+  color: var(--n-700);
+  text-decoration: none;
+}
+
+.linkGhost:hover {
+  background: var(--n-100);
+}
+
 .kv {
   margin: var(--sp-4) 0 0;
   display: grid;

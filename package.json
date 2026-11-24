@@ -14,6 +14,7 @@
     "build": "pnpm --filter @grid/core build && pnpm --filter @grid/web build && pnpm --filter @grid/server build",
     "typecheck": "pnpm -r typecheck",
     "check:tokens": "node tools/check-tokens.mjs",
+    "check:secrets": "node tools/check-secrets.mjs",
     "db:migrate": "pnpm --filter @grid/server db:migrate",
     "seed:user": "pnpm --filter @grid/server seed:user",
     "reset:password": "pnpm --filter @grid/server reset:password",

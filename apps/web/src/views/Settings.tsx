@@ -20,6 +20,19 @@ interface SettingsProps {
   user: SessionUser;
 }
 
+/** 导出统计里想展示给用户看的表（其余是内部表，说了也没意义） */
+const EXPORT_LABELS: Record<string, string> = {
+  task: '待办',
+  tag: '标签',
+  list: '清单',
+  recur_exception: '重复例外',
+  calendar_source: '日历源',
+  cal_event: '日程',
+  habit: '打卡项',
+  habit_log: '打卡记录',
+  conflict_log: '冲突记录',
+};
+
 /**
  * 设置页：收容那些"不属于某个视图"的东西——本地数据、服务端探活、Outlook 连接。
  * M0 的那套验收清单已经从主界面挪到这里，因为它是工程信息，不该占着四象限的位置。
@@ -28,6 +41,8 @@ export function Settings({ user }: SettingsProps) {
   const [health, setHealth] = useState<Health | null>(null);
   const [probing, setProbing] = useState(false);
   const [storage, setStorage] = useState<{ tasks: number; tags: number; usage: string } | null>(null);
+  const [exportStats, setExportStats] = useState<Record<string, number> | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setProbing(true);
@@ -56,6 +71,27 @@ export function Settings({ user }: SettingsProps) {
     void refresh();
     void refreshStorage();
   }, [refresh, refreshStorage]);
+
+  /** 服务端那头的全量数据量。失败不弹窗——离线时设置页其它部分仍要能用 */
+  const loadExportStats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/export/stats', { headers: { accept: 'application/json' } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as { counts: Record<string, number> };
+      setExportStats(data.counts);
+      setExportError(null);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : '读取失败');
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadExportStats();
+  }, [loadExportStats]);
+
+  const exportTotal = exportStats
+    ? Object.values(exportStats).reduce((sum, n) => sum + n, 0)
+    : null;
 
   return (
     <div className={styles.page}>
@@ -106,6 +142,58 @@ export function Settings({ user }: SettingsProps) {
         >
           清空本机数据
         </button>
+      </section>
+
+      <section className={styles.section} aria-labelledby="backup-title">
+        <div className={styles.sectionHead}>
+          <h2 className={styles.h2} id="backup-title">
+            备份与导出
+          </h2>
+          <button type="button" className={styles.ghost} onClick={() => void loadExportStats()}>
+            刷新
+          </button>
+        </div>
+        <p className={styles.lead}>
+          服务器每 6 小时自动备份一次（本机留 14 天，每周另有归档）。
+          下面这个按钮是<strong>最后一道保险</strong>：把你在服务端的全部数据导出成一个 JSON 文件，
+          存到本机或网盘。服务器整个没了，有这个文件也还能把数据捞回来。
+        </p>
+        {exportError ? (
+          <p className={styles.muted}>读取服务端数据量失败（{exportError}）：离线时导出不可用，但本地待办不受影响。</p>
+        ) : (
+          <dl className={styles.kv}>
+            {exportStats
+              ? Object.entries(EXPORT_LABELS).map(([table, label]) => (
+                  <div key={table}>
+                    <dt>{label}</dt>
+                    <dd className={styles.mono}>{exportStats[table] ?? 0}</dd>
+                  </div>
+                ))
+              : null}
+            {exportTotal !== null ? (
+              <div>
+                <dt>合计</dt>
+                <dd className={styles.mono}>{exportTotal}</dd>
+              </div>
+            ) : null}
+          </dl>
+        )}
+        <div className={styles.actions}>
+          {/*
+            用 <a download> 而不是 fetch：让浏览器自己处理下载，
+            几 MB 的 JSON 不必先进 JS 内存再拼 Blob。
+          */}
+          <a className={styles.linkGhost} href="/api/export" download>
+            导出全部数据（JSON）
+          </a>
+          <a className={styles.linkGhost} href="/api/export?inline=1" target="_blank" rel="noreferrer">
+            先看一眼前面的样子
+          </a>
+        </div>
+        <p className={styles.muted}>
+          导出的文件包含已删除的待办（标记为墓碑），这样恢复时才不会出现「父任务回来了、子任务没了」。
+          文件里有你的日历与打卡历史，等于一份完整的隐私副本，别丢到公开的地方。
+        </p>
       </section>
 
       <section className={styles.section} aria-labelledby="health-title">

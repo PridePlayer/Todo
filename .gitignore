@@ -17,3 +17,8 @@ Thumbs.db
 
 # 打包验证的临时产物（每轮 expo export 会生成一个，几十 MB）
 .export-check-*/
+
+# 备份/恢复演练用的临时目录（本地试跑 backup.sh、restore.sh 时生成）
+.tmp-backup/
+.tmp-restore/
+.tmp-rt/

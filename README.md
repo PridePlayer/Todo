@@ -2,15 +2,17 @@
 
 待办 + Outlook 日历 + 每日打卡，自托管，只做 Android 与 Web。
 
-当前进度：**M0 地基**（认证、会话、登录锁定、迁移、部署链路）+ **Outlook 授权通道**（能连上、能验活、令牌加密落库）。日历同步与待办功能从 M1/M4 开始。
+一个人自己能用的程度：四象限与清单、重复规则（含截止日期）、自建日历 + Outlook 双向同步、每日打卡（连续天数 / 热力图 / 补卡）、甘特只读、跨端同步（CRDT 式字段级合并）、Android APK。
 
 | 目录 | 说明 |
 |---|---|
 | `apps/web` | React 19 + Vite 8，桌面优先的 Web 端 |
-| `packages/core` | 双端共享层：zod 模型、类型化 API 客户端 |
+| `apps/mobile` | Expo Router + React Native，Android |
+| `packages/core` | 双端共享层：zod 模型、重复规则展开、类型化 API 客户端 |
 | `packages/server` | Fastify 5 + 双数据库驱动（SQLite / MySQL） |
-| `deploy/` | 部署脚本、systemd unit、nginx 模板、备份 |
-| `docs/` | PRD、架构、数据模型、UI 规范、里程碑、验收清单、实现决策、Outlook 接入指南 |
+| `deploy/` | 部署、备份、恢复、探活脚本 + systemd unit + nginx 模板 |
+| `tools/` | 调试与验收脚本（截图、浏览器验收、备份拉取） |
+| `docs/` | PRD、架构、数据模型、UI 规范、里程碑、验收清单、实现决策、Outlook 接入、部署手册 |
 
 ---
 
@@ -26,8 +28,8 @@ cp .env.example .env
 # 3. 建表
 pnpm db:migrate
 
-# 4. 创建账号（密码至少 12 位）
-pnpm seed:user --email me@example.com --password 'grid-dev-pass-2026'
+# 4. 创建账号（密码至少 12 位，自己定一个）
+pnpm seed:user --email me@example.com --password '换成一个足够长的口令'
 
 # 5. 同时起前端(5173)与后端(3000)
 pnpm dev
@@ -67,10 +69,17 @@ ssh -N -L 3307:127.0.0.1:3307 root@你的服务器
 | `pnpm seed:user --email x --password y` | 创建唯一管理员 |
 | `pnpm reset:password --email x` | 重置密码（不给 `--password` 则生成随机密码并打印一次） |
 | `pnpm healthcheck` | 打一次 `/api/healthz` |
+| `pnpm check:secrets` | 检查 `.env` 的真实值有没有漏进被追踪的文件（提交前跑一下） |
+| `bash deploy/backup.sh` | 立刻做一次备份（服务器上跑） |
+| `bash deploy/restore.sh` | 从备份恢复（不带参数会列出可选项） |
+| `bash deploy/healthcheck.sh` | 探活 + 检查备份新鲜度 |
 
 ---
 
-## M0 验收（对应 docs/06-验收清单.md A 组）
+## 冒烟验收（改完之后先过这 5 条）
+
+对应 `docs/06-验收清单.md` A 组。它不覆盖全部功能，只覆盖"地基还在不在"——
+认证、会话、锁定、登出、探活。任何一次改动之后跑一遍，成本 2 分钟。
 
 | # | 动作 | 期望 |
 |---|---|---|
@@ -80,7 +89,7 @@ ssh -N -L 3307:127.0.0.1:3307 root@你的服务器
 | 4 | 点登出 | 回登录页，DevTools → Application 里 IndexedDB 无残留库、localStorage 为空 |
 | 5 | `curl -s localhost:3000/api/healthz` | 含 `rssMB`（判断 2C2G 是否够用的第一个真实数据点） |
 
-> M0 出口条件：记下 `rssMB`。若服务器 `free -m` 的 available < 900MB，按 docs/02 §9.4 走降级决策（复用现有 5.7 建库）。
+> 记下 `rssMB`。若服务器 `free -m` 的 available < 900MB，按 docs/02 §9.4 走降级决策（复用现有 5.7 建库）。
 
 ---
 
@@ -123,6 +132,77 @@ cd /www/wwwroot/todo && bash deploy/deploy.sh
 
 ---
 
+## 备份与恢复
+
+三层，缺一层就有一种数据丢失方式挡不住：
+
+| 风险 | 手段 | 谁来做 |
+|---|---|---|
+| 误删 / 改错 | 每 6 小时自动备份，本机留 14 天 + 每周日留 8 周 | `deploy/backup.sh` → `/www/backup/grid/` |
+| 磁盘坏 / 重装系统 | 从服务器拉到你自己电脑 | `tools/pull-backup.ps1` |
+| 库被 DROP / 账号被盗 | 一键导出全部数据为 JSON | 设置页 → 备份与导出（`GET /api/export`） |
+
+### 1. 服务器自动备份
+
+宝塔 → 计划任务 → Shell 脚本，周期「N 小时 = 6」：
+
+```bash
+bash /www/wwwroot/todo/deploy/backup.sh
+```
+
+脚本会按 `DB_URL` 自动选 `mysqldump` 或 `VACUUM INTO`。每份都验两样：`gzip -t` 能解开，以及 dump 末尾有 mysqldump 的 `Dump completed` 标记——只看文件大小是不够的，连接中途断掉时前半截照样会落盘，而恢复时才炸。
+
+结果写进 `/www/backup/grid/status.txt`，`healthcheck.sh` 靠它判断"备份是不是已经不跑了"。备份挂掉是完全静默的，这是唯一能发现它的地方。
+
+### 2. 异地：拉到自己的电脑
+
+**本机备份和数据库在同一块盘上**，ECS 磁盘挂了、重装系统覆盖了 `/www`，两边一起没。这一层才扛得住服务器整个消失，而且不需要对象存储：
+
+```powershell
+# 一次性：配好免密登录
+ssh-keygen -t ed25519
+type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh root@todo.stellamp.me "mkdir -p ~/.ssh; cat >> ~/.ssh/authorized_keys"
+
+# 之后随时（也可挂任务计划程序每天 21:00 跑）
+powershell -ExecutionPolicy Bypass -File "E:\11_WorkBuddyFiles\Todo\tools\pull-backup.ps1"
+```
+
+默认把最新 3 份拉到 `%USERPROFILE%\GridBackup`，本地留 40 份，校验下载到的确实是 gzip。**只读不删**，服务器上的东西一份都不动。
+
+### 3. 恢复
+
+```bash
+bash /www/wwwroot/todo/deploy/restore.sh          # 不带参数会列出最近 10 份
+bash /www/wwwroot/todo/deploy/restore.sh /www/backup/grid/daily/grid_2026-11-24_0200.sql.gz
+```
+
+顺序是刻意的：先把**当前**库另存到 `pre-restore/`（恢复错文件还能回去）→ 停服务 → 灌数据 → 起服务 → 探活。要输入 `yes` 才执行。
+
+> 没验证过的备份不算备份。完整演练步骤（含行数核对）见 `docs/09` §10.6。
+
+### 4. 告警（可选）
+
+`.env` 加一行，备份失败或连续 14 小时没成功就会推到群里：
+
+```ini
+BACKUP_WEBHOOK_URL=https://oapi.dingtalk.com/robot/send?access_token=xxx
+```
+
+`bash deploy/healthcheck.sh` 退出码：`0` 正常 / `1` 服务异常 / `2` 服务正常但备份异常。
+
+---
+
+## 调试脚本要的密码
+
+`tools/shot.mjs`、`tools/browser-check.mjs`、`tools/calendar-check.ts` 会拿真实账号打登录接口，所以口令从环境变量读，**不写进仓库**：
+
+```bash
+GRID_TEST_PASSWORD=你的本地口令 node tools/shot.mjs calendar
+# 邮箱默认 me@example.com，不同的话用 GRID_TEST_EMAIL
+```
+
+---
+
 ## Outlook 排障
 
 | 现象 | 原因与处理 |
@@ -155,3 +235,4 @@ cd /www/wwwroot/todo && bash deploy/deploy.sh
 3. 主键是 ULID（`VARCHAR(26)`），不用自增 —— 自增 id 做增量同步游标必然漏行。
 4. 迁移只增不改：只加表 / 可空列 / 索引。
 5. 任何删除操作都要有二次确认或撤销。
+6. **这个仓库是公开的**：`.env` 永不入库；口令、密钥、真实邮箱一律从环境变量读，不写进代码、文档或调试脚本。提交前跑 `pnpm check:secrets` —— git 历史是追加的，一旦漏进去就删不干净了。

@@ -35,6 +35,16 @@ import { findAccountByUser } from '../packages/server/src/repo/oauth.js';
 const env = loadEnv();
 const db = createDb(env.dbUrl);
 const graph = createGraphContext(db, env);
+
+// 本地开发库的登录口令，从环境变量读，不写进仓库——这个仓库是公开的。
+// 用法：GRID_TEST_PASSWORD=你的口令 tsx tools/calendar-check.ts
+const TEST_EMAIL = process.env.GRID_TEST_EMAIL ?? 'me@example.com';
+const TEST_PASSWORD = process.env.GRID_TEST_PASSWORD;
+if (!TEST_PASSWORD) {
+  console.error('需要 GRID_TEST_PASSWORD 环境变量（本地开发库的登录口令）');
+  process.exit(1);
+}
+
 if (!graph) {
   console.error('OAuth 未配置，无法跑 M4 验收');
   process.exit(1);
@@ -290,7 +300,7 @@ const session = (await sessionRes.json()) as { csrfToken: string };
 await http('/auth/login', {
   method: 'POST',
   csrf: session.csrfToken,
-  body: JSON.stringify({ email: 'me@example.com', password: 'grid-dev-pass-2026' }),
+  body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
 });
 const session2 = (await (await http('/auth/session')).json()) as { csrfToken: string };
 const csrf = session2.csrfToken;

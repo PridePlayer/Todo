@@ -52,7 +52,9 @@ const user = await createUser(db, 'device-check@example.invalid', 'not-a-real-ha
 const other = await createUser(db, 'device-check-2@example.invalid', 'not-a-real-hash');
 const session = await createSession(db, user.id, env.sessionTtlMs);
 
-const PASSWORD = 'grid-dev-pass-2026';
+// 只在这个脚本自建的临时库里有效（开头会重建 device-check 用户），
+// 不要写成任何真实环境用过的口令——仓库是公开的。
+const PASSWORD = 'device-check-only-passphrase';
 // 直接用真实哈希，让 device-login 走完整校验链（含锁定计数器）
 const { hashPassword } = await import('../packages/server/src/auth/password.js');
 await db.query('UPDATE app_user SET password_hash = ? WHERE id = ?', [await hashPassword(PASSWORD), user.id]);
