@@ -37,15 +37,77 @@ export default function TodayScreen() {
   const [title, setTitle] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  const open = useMemo(
-    () =>
-      snapshot.tasks
-        .filter((task) => task.completedAt === null)
-        // 先按象限（1 最重要），再按手动排序。sortOrder 允许负数，
-        // 新建任务用 -Date.now() 塞到最前，所以直接升序就够
-        .sort((a, b) => a.quadrant - b.quadrant || a.sortOrder - b.sortOrder),
-    [snapshot.tasks],
-  );
+  const todayKey = useMemo(() => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }, []);
+
+  /**
+   * 今日页只放"今天要做的事"，分三段：
+   *   逾期   —— 截止日早于今天、还没做完的
+   *   今天   —— 截止日就是今天，或者今天有具体时间的
+   *   收件箱 —— 完全没有日期/时间的（还没排期的）
+   *
+   * 未来日期的任务**不出现**：它们属于"以后"，塞进今日只会让这一页
+   * 变成"全部任务"的别名 —— 这正是之前的问题。
+   */
+  const sections = useMemo(() => {
+    const keyOf = (ts: number) => {
+      const d = new Date(ts);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    };
+    // 先按象限（1 最重要），再按手动排序
+    const byQuadrant = (a: Task, b: Task) => a.quadrant - b.quadrant || a.sortOrder - b.sortOrder;
+
+    const overdue: Task[] = [];
+    const dueToday: Task[] = [];
+    const inbox: Task[] = [];
+
+    for (const task of snapshot.tasks) {
+      if (task.completedAt !== null) continue;
+      const hasTime = task.startAt !== null;
+      const startIsToday = hasTime && keyOf(task.startAt!) === todayKey;
+      const due = task.dueDate;
+
+      if (due !== null && due < todayKey) {
+        overdue.push(task);
+        continue;
+      }
+      if (due === todayKey || startIsToday) {
+        dueToday.push(task);
+        continue;
+      }
+      // 既没日期也没时间 → 收件箱；有未来日期的直接跳过
+      if (due === null && !hasTime) inbox.push(task);
+    }
+
+    return {
+      overdue: overdue.sort(byQuadrant),
+      dueToday: dueToday.sort((a, b) => (a.startAt ?? 0) - (b.startAt ?? 0) || byQuadrant(a, b)),
+      inbox: inbox.sort(byQuadrant),
+    };
+  }, [snapshot.tasks, todayKey]);
+
+  type Item =
+    | { kind: 'header'; key: string; title: string; count: number }
+    | { kind: 'task'; task: Task };
+
+  const items = useMemo<Item[]>(() => {
+    const out: Item[] = [];
+    const push = (key: string, title: string, list: Task[]) => {
+      if (list.length === 0) return;
+      out.push({ kind: 'header', key: `h-${key}`, title, count: list.length });
+      for (const task of list) out.push({ kind: 'task', task });
+    };
+    push('overdue', '已逾期', sections.overdue);
+    push('today', '今日', sections.dueToday);
+    push('inbox', '收件箱', sections.inbox);
+    return out;
+  }, [sections]);
+
+  const openCount = sections.overdue.length + sections.dueToday.length;
 
   const doneToday = useMemo(() => {
     const start = new Date();
@@ -79,7 +141,7 @@ export default function TodayScreen() {
           <View style={styles.headLeft}>
             <Text style={styles.date}>{todayLabel()}</Text>
             <Text style={styles.count}>
-              {open.length} 项待办
+              {openCount} 项今天要做
               {doneToday > 0 ? ` · 今日已完成 ${doneToday}` : ''}
             </Text>
           </View>
@@ -107,25 +169,32 @@ export default function TodayScreen() {
         ) : null}
 
         <FlatList
-          data={open}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={open.length === 0 ? styles.listEmpty : styles.list}
+          data={items}
+          keyExtractor={(item) => (item.kind === 'header' ? item.key : item.task.id)}
+          contentContainerStyle={items.length === 0 ? styles.listEmpty : styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={C.a500} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>没有待办</Text>
-              <Text style={styles.emptyHint}>在下面输入框写点什么，回车即存</Text>
+              <Text style={styles.emptyTitle}>今天没有要做的</Text>
+              <Text style={styles.emptyHint}>在下面输入框写点什么，回车即存；带未来日期的任务在「列表」里</Text>
             </View>
           }
-          renderItem={({ item }) => (
-            <Row
-              task={item}
-              onToggle={() => {
-                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                void toggleTask(item.id);
-              }}
-            />
-          )}
+          renderItem={({ item }) =>
+            item.kind === 'header' ? (
+              <View style={styles.groupHead}>
+                <Text style={styles.groupTitle}>{item.title}</Text>
+                <Text style={styles.groupCount}>{item.count}</Text>
+              </View>
+            ) : (
+              <Row
+                task={item.task}
+                onToggle={() => {
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  void toggleTask(item.task.id);
+                }}
+              />
+            )
+          }
         />
 
         <View style={styles.composer}>
@@ -216,6 +285,17 @@ const styles = StyleSheet.create({
     borderLeftColor: C.warn,
   },
   bannerOfflineText: { fontSize: FONT.sm, color: C.warn },
+  groupHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: SP[2],
+    paddingTop: SP[3],
+    paddingBottom: SP[1],
+    borderBottomWidth: 1,
+    borderBottomColor: C.n200,
+  },
+  groupTitle: { fontSize: FONT.xs, color: C.n500, letterSpacing: 1 },
+  groupCount: { fontSize: FONT.xs, color: C.n400 },
   list: { paddingHorizontal: SP[4], paddingBottom: SP[8] },
   listEmpty: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SP[4] },
   empty: { alignItems: 'flex-start' },
