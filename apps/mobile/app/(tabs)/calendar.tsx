@@ -57,7 +57,18 @@ export default function CalendarScreen() {
     const to = addDays(from, HORIZON + LOOKBACK);
     const rows: Row[] = [];
 
+    // 自己刚建进 Outlook 的日程，会作为 cal_event 被同步拉回来。
+    // 不排除的话，同一件事在日历上会出现两条（一条待办、一条事件）——
+    // 判据用「标题 + 分钟级开始时间」，误判概率极低，且只影响显示
+    const laneKey = (title: string, ts: number) => `${title.trim()}|${Math.round(ts / 60_000)}`;
+    const owned = new Set(
+      snapshot.tasks
+        .filter((task) => task.startAt !== null)
+        .map((task) => laneKey(task.title, task.startAt!)),
+    );
+
     for (const ev of snapshot.events) {
+      if (owned.has(laneKey(ev.subject, ev.startAt))) continue;
       // colorKey 本该来自 calendar_source（灰阶档位），移动端没把源解析进 snapshot，
       // 先统一 0；后续做"日历源开关"时再接上
       const origin = { sourceId: ev.sourceId, webLink: ev.webLink, readOnly: true, colorKey: 0 };

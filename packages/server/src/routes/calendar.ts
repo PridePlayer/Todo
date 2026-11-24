@@ -4,6 +4,8 @@ import { verifyCsrfToken } from '../auth/csrf.js';
 import type { Db } from '../db/types.js';
 import type { AppEnv } from '../env.js';
 import { HttpError } from '../http/errors.js';
+import { formatZonedDateTime } from '@grid/core';
+import { CAL_TIME_ZONE, createEvent } from '../graph/client.js';
 import { readSyncState } from '../graph/delta.js';
 import { loadSources, refreshSources } from '../graph/sources.js';
 import { NotConnectedError, ReauthRequiredError, type GraphTokens } from '../graph/token.js';
@@ -96,6 +98,59 @@ export async function calendarRoutes(app: FastifyInstance, deps: Deps): Promise<
       if (err instanceof ReauthRequiredError) throw new HttpError(409, 'reauth_required', err.reason);
       throw err;
     }
+  });
+
+  /**
+   * 新建日历事件并写进 Outlook。
+   *
+   * 为什么要有这条路由：push 队列只处理「改」和「删」——那两件事针对的是
+   * 已经存在的 Graph 事件（有 ms_event_id 可寻）。新建没有身份可依，
+   * 走队列反而要先伪造一条 cal_event，再等下一轮 drain，绕远且容易重复。
+   * 这里直接同步调用 Graph：成功就立刻有 msEventId，失败就明确报错。
+   *
+   * 写入目标：优先「默认且可编辑」的日历，其次任意可编辑的日历。
+   * 只读日历（节假日、别人的共享日历）会被跳过，否则 Graph 会 403。
+   */
+  app.post('/calendar/events', async (req) => {
+    if (!verifyCsrfToken(req)) throw new HttpError(403, 'csrf_failed', '页面状态已过期，请刷新后重试');
+    const userId = await requireUser(req);
+    const graph = requireGraph();
+
+    const body = req.body as {
+      title?: unknown;
+      startAt?: unknown;
+      endAt?: unknown;
+      location?: unknown;
+    } | null;
+    const title = typeof body?.title === 'string' ? body.title.trim() : '';
+    const startAt = typeof body?.startAt === 'number' ? body.startAt : null;
+    const endAt = typeof body?.endAt === 'number' ? body.endAt : null;
+    if (title === '' || startAt === null || endAt === null) {
+      throw new HttpError(400, 'bad_request', '需要标题、开始时间和结束时间');
+    }
+    if (endAt <= startAt) throw new HttpError(400, 'bad_range', '结束时间必须晚于开始时间');
+
+    const account = await findAccountByUser(db, userId);
+    if (!account) throw new HttpError(404, 'not_connected', '尚未连接 Microsoft 账号');
+
+    const sources = await loadSources(db, userId);
+    const writable = sources.filter((row) => Number(row.can_edit) === 1 && Number(row.is_synced) === 1);
+    const target = writable.find((row) => Number(row.is_default) === 1) ?? writable[0];
+    if (!target) {
+      throw new HttpError(409, 'no_writable_calendar', '没有可写入的日历，请先在设置里启用一个可编辑的日历');
+    }
+
+    const accessToken = await graph.accessTokenFor(userId);
+    const location = typeof body?.location === 'string' && body.location.trim() !== '' ? body.location.trim() : null;
+
+    const msEventId = await createEvent(accessToken, target.ms_calendar_id, {
+      subject: title.slice(0, 255),
+      start: { dateTime: formatZonedDateTime(startAt, CAL_TIME_ZONE), timeZone: CAL_TIME_ZONE },
+      end: { dateTime: formatZonedDateTime(endAt, CAL_TIME_ZONE), timeZone: CAL_TIME_ZONE },
+      ...(location ? { location: { displayName: location.slice(0, 255) } } : {}),
+    });
+
+    return { ok: true, msEventId, calendarId: target.id, calendarName: target.name };
   });
 
   /** 重新发现日历列表（用户新建/删除了日历之后） */

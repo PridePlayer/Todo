@@ -97,9 +97,16 @@ export function useOccurrences(from: number, to: number): { occurrences: Occurre
       series.push(toSeries(task, bySeries));
     }
 
+    // 自己刚写进 Outlook 的日程会被同步拉回来，不排除就会和本地待办重复显示。
+    // 判据：标题相同 + 开始时间相差不到 1 分钟（只影响显示，误判概率极低）
+    const ownedRows = tasks.filter((task) => task.startAt !== null && task.deletedAt === null);
+    const owns = (subject: string, startAt: number): boolean =>
+      ownedRows.some((task) => task.title.trim() === subject.trim() && Math.abs(task.startAt! - startAt) < 60_000);
+
     const sourceMap = new Map(sources.map((row) => [row.id, row]));
     for (const event of events) {
       if (event.deletedAt !== null) continue;
+      if (owns(event.subject, event.startAt)) continue;
       const source = sourceMap.get(event.sourceId);
       // 源被关掉或删掉的事件一律不显示：这是"关掉节假日日历"真正生效的地方
       if (!source || !source.isVisible || !source.isSynced || source.deletedAt !== null) continue;

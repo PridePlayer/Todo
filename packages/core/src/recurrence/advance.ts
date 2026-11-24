@@ -41,7 +41,12 @@ export function nextOccurrencePatch(
     task.startAt ?? (task.dueDate ? new Date(`${task.dueDate}T09:00:00`).getTime() : null);
   if (anchor === null) return null;
 
-  // 一年足够覆盖任何现实规则；limit=1 只要第一个
+  // 当前这一次的时间戳：完成/跳过都表示"这一次结束了"，下一次必须严格晚于它。
+  // 不能只靠窗口的 from 排除 —— expandSeries 为了让"改期到窗口内的实例"可见，
+  // 会把起点往前放宽 SHIFT_WINDOW，今天的实例于是又出现在结果里。
+  const currentTs = anchor;
+
+  // 一年足够覆盖任何现实规则；多取几条再用 currentTs 过滤
   const horizon = after + 366 * 86_400_000;
   const occurrences = expandSeries(
     {
@@ -57,10 +62,11 @@ export function nextOccurrencePatch(
     },
     after,
     horizon,
-    1,
+    8,
   );
 
-  const next = occurrences[0];
+  // 严格晚于当前这次。找不到就是规则结束了
+  const next = occurrences.find((occ) => occ.start > currentTs);
   if (!next) return null;
 
   const duration =

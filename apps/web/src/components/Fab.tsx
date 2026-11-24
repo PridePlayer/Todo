@@ -9,6 +9,8 @@ import {
   weekdayOf,
 } from '@grid/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ApiError } from '@grid/core';
+import { api } from '../api';
 import { repo } from '../db/repo';
 import { useTags } from '../hooks/useStore';
 import { TagPicker } from './TagPicker';
@@ -48,6 +50,7 @@ export function Fab() {
   const [repeatDays, setRepeatDays] = useState<Weekday[]>([]);
   const [repeatUntil, setRepeatUntil] = useState('');
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement | null>(null);
 
   // 打开时自动聚焦标题，省一次点击
@@ -85,16 +88,36 @@ export function Fab() {
               until: repeatUntil ? new Date(`${repeatUntil}T23:59:59`).getTime() : null,
             });
 
+      const startAt = kind === 'event' && date && startTime ? combineDateTime(date, startTime) : null;
+      const endAt = kind === 'event' && date && startTime && endTime ? combineDateTime(date, endTime) : startAt !== null ? startAt + 60 * 60_000 : null;
+
       await repo.create({
         title: trimmed,
         quadrant: 4,
         dueDate: date || null,
-        startAt: kind === 'event' && date && startTime ? combineDateTime(date, startTime) : null,
-        endAt: kind === 'event' && date && startTime && endTime ? combineDateTime(date, endTime) : null,
+        startAt,
+        endAt,
         location: location.trim() || null,
         tagIds,
         rrule,
       });
+      // 日程同时写进 Outlook。失败只提示、不回滚 ——
+      // 待办已经落地，用户不该因为日历没连上就丢掉刚写的东西
+      if (startAt !== null && endAt !== null) {
+        try {
+          await api.calendarCreateEvent({ title: trimmed, startAt, endAt, location: location.trim() || null });
+        } catch (err) {
+          const reason =
+            err instanceof ApiError && err.status === 404
+              ? '未连接 Outlook，已存为本机待办'
+              : err instanceof ApiError && err.status === 409
+                ? '没有可写入的日历，已存为本机待办'
+                : `写入 Outlook 失败：${err instanceof Error ? err.message : String(err)}`;
+          setNotice(reason);
+          window.setTimeout(() => setNotice(null), 4000);
+        }
+      }
+
       reset();
       setOpen(false);
     } finally {
@@ -229,6 +252,8 @@ export function Fab() {
               </label>
             ) : null}
           </div>
+
+          {notice ? <p className={styles.notice}>{notice}</p> : null}
 
           <div className={styles.actions}>
             <button type="button" className={styles.ghost} onClick={() => setOpen(false)}>

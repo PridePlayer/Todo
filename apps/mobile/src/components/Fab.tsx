@@ -35,7 +35,7 @@ const WEEKDAY_CN: Record<Weekday, string> = { MO: '一', TU: '二', WE: '三', T
  * 不锁背景滚动（新建是高频动作，不该每次都要重建上下文）。
  */
 export function Fab() {
-  const { snapshot, createTask, ensureTag } = useApp();
+  const { snapshot, createTask, ensureTag, createCalendarEvent, showFlash } = useApp();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<Kind>('task');
@@ -78,15 +78,30 @@ export function Fab() {
               until: repeatUntil ? new Date(`${repeatUntil}T23:59:59`).getTime() : null,
             });
 
+      const startAt = kind === 'event' && date && startTime ? anchor : null;
+      const endAt = startAt !== null ? startAt + 60 * 60_000 : null;
+
       await createTask({
         title: trimmed,
         quadrant: 4,
         dueDate: date || null,
-        startAt: kind === 'event' && date && startTime ? anchor : null,
+        startAt,
         location: location.trim() || null,
         tagIds,
         rrule,
       });
+      // 日程同时写进 Outlook。失败不阻止创建 —— 待办先落地，
+      // 提示告诉用户"只存在本机"比直接报错更可用
+      if (startAt !== null && endAt !== null) {
+        const result = await createCalendarEvent({
+          title: trimmed,
+          startAt,
+          endAt,
+          location: location.trim() || null,
+        });
+        showFlash(result.ok ? '已写入 Outlook 日历' : `已存本机：${result.error ?? '未写入 Outlook'}`);
+      }
+
       reset();
       setOpen(false);
     } finally {

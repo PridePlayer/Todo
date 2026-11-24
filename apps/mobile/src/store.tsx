@@ -104,6 +104,13 @@ interface AppState {
   skipOccurrence: (seriesId: string, originalStart: number) => Promise<void>;
   flash: string | null;
   showFlash: (text: string) => void;
+  /** 把一条日程写进 Outlook。未连接时返回 ok:false，不抛错 */
+  createCalendarEvent: (input: {
+    title: string;
+    startAt: number;
+    endAt: number;
+    location?: string | null;
+  }) => Promise<{ ok: boolean; error?: string }>;
   deleteTask: (id: string) => Promise<void>;
   ensureTag: (name: string) => Promise<Tag>;
   checkHabit: (habitId: string, logDate: string, delta: number) => Promise<void>;
@@ -706,6 +713,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [refresh, snapshot.habits]);
 
   /**
+   * 写一条日程到 Outlook。
+   *
+   * 不抛错是刻意的：日程能不能落到日历上，不该决定"这条待办建不建得成"。
+   * 没连 Outlook、令牌过期、日历只读 —— 都退化成"只存本机"，由调用方提示。
+   */
+  const createCalendarEvent = useCallback(
+    async (input: { title: string; startAt: number; endAt: number; location?: string | null }) => {
+      try {
+        await api().calendarCreateEvent({
+          title: input.title,
+          startAt: input.startAt,
+          endAt: input.endAt,
+          location: input.location ?? null,
+        });
+        return { ok: true };
+      } catch (err) {
+        if (err instanceof ApiError) {
+          if (err.status === 404) return { ok: false, error: '未连接 Outlook' };
+          if (err.status === 409) return { ok: false, error: '没有可写入的日历' };
+          return { ok: false, error: err.message };
+        }
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+    [],
+  );
+
+  /**
    * 找标签或建标签。
    *
    * 先按名字在本地找（同名不同 id 会变成两个标签，界面上看就是重复项），
@@ -844,6 +879,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       skipOccurrence,
       flash,
       showFlash,
+      createCalendarEvent,
       deleteTask,
       ensureTag,
       checkHabit,
@@ -872,6 +908,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       skipOccurrence,
       flash,
       showFlash,
+      createCalendarEvent,
       deleteTask,
       ensureTag,
       checkHabit,

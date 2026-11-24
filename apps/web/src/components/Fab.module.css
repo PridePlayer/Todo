@@ -169,3 +169,13 @@
     transform: none;
   }
 }
+
+/* 回写失败的提示：留在卡片里，不弹窗打断 */
+.notice {
+  margin: var(--sp-1) 0 0;
+  padding: var(--sp-1) var(--sp-2);
+  border-left: 2px solid var(--warn);
+  background: var(--n-50);
+  font-size: var(--t-xs);
+  color: var(--n-700);
+}

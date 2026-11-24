@@ -86,6 +86,13 @@ export interface ApiClient {
   calendarSync(): Promise<CalendarSyncResult>;
   /** 单个日历源的显示/同步开关 */
   calendarPatchSource(id: string, patch: { isVisible?: boolean; isSynced?: boolean }): Promise<void>;
+  /** 新建一条日程并写进 Outlook（需要已连接且存在可写日历） */
+  calendarCreateEvent(body: {
+    title: string;
+    startAt: number;
+    endAt: number;
+    location?: string | null;
+  }): Promise<{ ok: boolean; msEventId: string; calendarId: string; calendarName: string }>;
   /** 重新发现日历列表（用户新建/删除了日历） */
   calendarRefreshSources(): Promise<{ sources: { id: string; name: string; isVisible: boolean; isSynced: boolean; canEdit: boolean }[] }>;
   /** App 设备登录：一步拿到长效令牌，不落 Cookie（Android 端专用） */
@@ -239,6 +246,19 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
 
     async syncState() {
       return request('/sync/state', { parse: syncStateSchema });
+    },
+
+    async calendarCreateEvent(body) {
+      return request('/calendar/events', {
+        method: 'POST',
+        body: JSON.stringify(body),
+        parse: z.object({
+          ok: z.boolean(),
+          msEventId: z.string(),
+          calendarId: z.string(),
+          calendarName: z.string(),
+        }),
+      });
     },
 
     async calendarStatus() {
