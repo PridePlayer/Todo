@@ -91,6 +91,15 @@ interface AppState {
   createTask: (input: NewTaskInput) => Promise<string>;
   patchTask: (id: string, patch: Record<string, unknown>) => Promise<void>;
   patchHabit: (id: string, patch: Partial<Habit>) => Promise<void>;
+  createHabit: (input: {
+    name: string;
+    type: 'check' | 'count' | 'duration';
+    target: number;
+    unit: string | null;
+    daysOfWeek: number[];
+  }) => Promise<void>;
+  archiveHabit: (id: string, archived: boolean) => Promise<void>;
+  deleteHabit: (id: string) => Promise<void>;
   /** 跳过重复任务的某一次（写一条 deleted 例外，该次不再出现） */
   skipOccurrence: (seriesId: string, originalStart: number) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
@@ -609,6 +618,69 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [refresh, snapshot.exceptions, snapshot.tasks],
   );
 
+  const createHabit = useCallback(
+    async (input: { name: string; type: 'check' | 'count' | 'duration'; target: number; unit: string | null; daysOfWeek: number[] }) => {
+      const name = input.name.trim();
+      if (name === '') return;
+      const device = await ensureDeviceId();
+      const now = Date.now();
+      const habit: Habit = {
+        id: ulid(),
+        name,
+        type: input.type,
+        // 打勾型的目标恒为 1：它没有"部分完成"的概念
+        target: input.type === 'check' ? 1 : Math.max(1, Math.round(input.target)),
+        unit: input.type === 'check' ? null : input.unit,
+        daysOfWeek: [...input.daysOfWeek].sort((a, b) => a - b),
+        colorKey: 0,
+        sortOrder: -now,
+        archivedAt: null,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        rev: 1,
+      };
+      await putRow('habit', habit.id, 1, habit as unknown as Record<string, unknown>);
+      await queueOp({
+        opId: ulid(),
+        table: 'habit',
+        action: 'create',
+        id: habit.id,
+        baseRev: 0,
+        fields: habit as unknown as Record<string, unknown>,
+        hlc: nextHlc(device),
+      });
+      setSnapshot((prev) => ({ ...prev, habits: [...prev.habits, habit] }));
+      setPending((n) => n + 1);
+      void refresh();
+    },
+    [refresh],
+  );
+
+  const archiveHabit = useCallback(async (id: string, archived: boolean) => {
+    await patchHabit(id, { archivedAt: archived ? Date.now() : null });
+  }, [patchHabit]);
+
+  const deleteHabit = useCallback(async (id: string) => {
+    const habit = snapshot.habits.find((h) => h.id === id);
+    if (!habit) return;
+    const device = await ensureDeviceId();
+    const now = Date.now();
+    await softDeleteRow('habit', id, now);
+    await queueOp({
+      opId: ulid(),
+      table: 'habit',
+      action: 'delete',
+      id,
+      baseRev: habit.rev,
+      fields: {},
+      hlc: nextHlc(device),
+    });
+    setSnapshot((prev) => ({ ...prev, habits: prev.habits.filter((h) => h.id !== id) }));
+    setPending((n) => n + 1);
+    void refresh();
+  }, [refresh, snapshot.habits]);
+
   /**
    * 找标签或建标签。
    *
@@ -742,6 +814,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       createTask,
       patchTask,
       patchHabit,
+      createHabit,
+      archiveHabit,
+      deleteHabit,
       skipOccurrence,
       deleteTask,
       ensureTag,
@@ -765,6 +840,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       createTask,
       patchTask,
       patchHabit,
+      createHabit,
+      archiveHabit,
+      deleteHabit,
       skipOccurrence,
       deleteTask,
       ensureTag,

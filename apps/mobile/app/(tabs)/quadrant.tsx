@@ -1,6 +1,7 @@
-import { QUADRANT_META, QUADRANT_ORDER, type Quadrant } from '@grid/core';
+import { QUADRANT_META, QUADRANT_ORDER, type Quadrant, type Task } from '@grid/core';
 import { useMemo } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '../../src/store';
 import { C, FONT, HIT, SP } from '../../src/theme';
@@ -12,7 +13,9 @@ import { C, FONT, HIT, SP } from '../../src/theme';
  * 而且第一版只要求"看得清、能完成"。迁移象限留在 Web 端。
  */
 export default function QuadrantScreen() {
-  const { snapshot, toggleTask } = useApp();
+  const { snapshot, toggleTask, patchTask } = useApp();
+  // 长按迁移象限：手机上做不了跨格拖拽，用长按选目标格替代
+  const [moving, setMoving] = useState<Task | null>(null);
 
   const groups = useMemo(() => {
     const map = new Map<Quadrant, typeof snapshot.tasks>();
@@ -56,9 +59,11 @@ export default function QuadrantScreen() {
                     <Pressable
                       key={task.id}
                       onPress={() => void toggleTask(task.id)}
+                      onLongPress={() => setMoving(task)}
+                      delayLongPress={350}
                       style={({ pressed }) => [styles.item, pressed && { opacity: 0.6 }]}
                       accessibilityRole="button"
-                      accessibilityLabel={`完成「${task.title}」`}
+                      accessibilityLabel={`完成「${task.title}」，长按可移动到其他象限`}
                     >
                       <Text style={styles.itemText} numberOfLines={2}>
                         {task.title}
@@ -72,11 +77,68 @@ export default function QuadrantScreen() {
           );
         }}
       />
+      <Modal visible={moving !== null} transparent animationType="fade" onRequestClose={() => setMoving(null)}>
+        <Pressable style={styles.backdrop} onPress={() => setMoving(null)} accessibilityLabel="关闭" />
+        <View style={styles.sheet}>
+          <Text style={styles.sheetTitle}>移动到</Text>
+          {QUADRANT_ORDER.map((q) => {
+            const meta = QUADRANT_META[q];
+            const current = moving?.quadrant === q;
+            return (
+              <Pressable
+                key={q}
+                disabled={current}
+                onPress={() => {
+                  const task = moving;
+                  if (!task) return;
+                  setMoving(null);
+                  if (current) return;
+                  const bits = 4 - q;
+                  // 只传两个开关，quadrant 由 patchTask 派生
+                  void patchTask(task.id, { important: (bits & 2) !== 0, urgent: (bits & 1) !== 0 });
+                }}
+                style={[styles.moveRow, current && styles.moveRowCurrent]}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.moveNo, current && { color: C.n400 }]}>{meta.no}</Text>
+                <Text style={[styles.moveTitle, current && { color: C.n400 }]}>{meta.title}</Text>
+                {current ? <Text style={styles.moveCurrent}>当前</Text> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(10,10,10,0.28)' },
+  sheet: {
+    position: 'absolute',
+    left: SP[4],
+    right: SP[4],
+    top: '32%',
+    backgroundColor: C.n0,
+    borderWidth: 1,
+    borderColor: C.n200,
+    borderRadius: 2,
+    padding: SP[3],
+  },
+  sheetTitle: { fontSize: FONT.xs, color: C.n500, marginBottom: SP[2] },
+  moveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SP[2],
+    minHeight: HIT,
+    paddingHorizontal: SP[2],
+    borderBottomWidth: 1,
+    borderBottomColor: C.n100,
+  },
+  moveRowCurrent: { opacity: 0.6 },
+  moveNo: { fontSize: FONT.xs, color: C.n400, width: 24 },
+  moveTitle: { flex: 1, fontSize: FONT.body, color: C.n900 },
+  moveCurrent: { fontSize: FONT.xs, color: C.n400 },
   root: { flex: 1, backgroundColor: C.n0 },
   head: { paddingHorizontal: SP[4], paddingTop: SP[4], paddingBottom: SP[3] },
   title: { fontSize: FONT.xl, color: C.n900, fontWeight: '600' },

@@ -9,7 +9,7 @@ import {
 } from '@grid/core';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '../../src/store';
 import { C, FONT, HIT, SP } from '../../src/theme';
@@ -28,7 +28,7 @@ const TYPE_LABEL: Record<string, string> = { check: '打勾', count: '计数', d
 export default function HabitDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { snapshot, patchHabit } = useApp();
+  const { snapshot, patchHabit, archiveHabit, deleteHabit } = useApp();
   const habit = snapshot.habits.find((h) => h.id === id);
   const [targetDraft, setTargetDraft] = useState('');
   const [editing, setEditing] = useState(false);
@@ -160,6 +160,50 @@ export default function HabitDetailScreen() {
             <Text style={styles.btnText}>修改目标（当前 {habit.target} {unit}）</Text>
           </Pressable>
         )}
+        <Pressable
+          onPress={() => {
+            Alert.alert(
+              habit.archivedAt === null ? '归档习惯' : '取消归档',
+              habit.archivedAt === null
+                ? '归档后不再出现在今日列表，历史统计保留。'
+                : '回到今日列表继续打卡。',
+              [
+                { text: '取消', style: 'cancel' },
+                {
+                  text: '确定',
+                  onPress: () => {
+                    void archiveHabit(habit.id, habit.archivedAt === null);
+                    router.back();
+                  },
+                },
+              ],
+            );
+          }}
+          style={styles.btn}
+          accessibilityRole="button"
+        >
+          <Text style={styles.btnText}>{habit.archivedAt === null ? '归档' : '取消归档'}</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => {
+            Alert.alert('删除习惯', `「${habit.name}」及其全部打卡记录都会被删除，不可恢复。`, [
+              { text: '取消', style: 'cancel' },
+              {
+                text: '删除',
+                style: 'destructive',
+                onPress: () => {
+                  void deleteHabit(habit.id);
+                  router.back();
+                },
+              },
+            ]);
+          }}
+          style={[styles.btn, { borderColor: C.danger, marginTop: SP[2] }]}
+          accessibilityRole="button"
+        >
+          <Text style={[styles.btnText, { color: C.danger }]}>删除习惯</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );

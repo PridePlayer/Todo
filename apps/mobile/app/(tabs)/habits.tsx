@@ -1,6 +1,6 @@
 import { habitLogId, habitUnit, isScheduled, weekdayOfKey, type Habit } from '@grid/core';
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '../../src/store';
@@ -13,8 +13,37 @@ function todayKey(): string {
 }
 
 export default function HabitsScreen() {
-  const { snapshot, checkHabit, phase } = useApp();
+  const { snapshot, checkHabit, phase, createHabit } = useApp();
   const router = useRouter();
+  const [creating, setCreating] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [draftType, setDraftType] = useState<'check' | 'count' | 'duration'>('check');
+  const [draftTarget, setDraftTarget] = useState('1');
+  const [draftUnit, setDraftUnit] = useState('');
+  const [draftDays, setDraftDays] = useState<number[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  async function submitHabit() {
+    if (draftName.trim() === '' || saving) return;
+    setSaving(true);
+    try {
+      await createHabit({
+        name: draftName,
+        type: draftType,
+        target: draftType === 'check' ? 1 : Number(draftTarget) || 1,
+        unit: draftType === 'check' ? null : draftUnit.trim() || (draftType === 'duration' ? '分钟' : '次'),
+        daysOfWeek: draftDays,
+      });
+      setDraftName('');
+      setDraftType('check');
+      setDraftTarget('1');
+      setDraftUnit('');
+      setDraftDays([]);
+      setCreating(false);
+    } finally {
+      setSaving(false);
+    }
+  }
   const [dayKey] = useState(todayKey);
 
   const due = useMemo(() => {
@@ -75,6 +104,95 @@ export default function HabitsScreen() {
           />
         )}
       />
+
+      <Modal visible={creating} transparent animationType="slide" onRequestClose={() => setCreating(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setCreating(false)} accessibilityLabel="关闭" />
+        <View style={styles.sheet}>
+          <View style={styles.handle} />
+          <Text style={styles.sheetTitle}>新建习惯</Text>
+
+          <TextInput
+            value={draftName}
+            onChangeText={setDraftName}
+            placeholder="比如：喝 8 杯水"
+            placeholderTextColor={C.n400}
+            style={styles.input}
+            autoFocus
+          />
+
+          <View style={styles.segments}>
+            {([
+              ['check', '打勾'],
+              ['count', '计数'],
+              ['duration', '时长'],
+            ] as const).map(([key, label]) => (
+              <Pressable
+                key={key}
+                onPress={() => setDraftType(key)}
+                style={[styles.segment, draftType === key && styles.segmentOn]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: draftType === key }}
+              >
+                <Text style={[styles.segmentText, draftType === key && styles.onText]}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {draftType !== 'check' ? (
+            <View style={styles.inlineRow}>
+              <TextInput
+                value={draftTarget}
+                onChangeText={setDraftTarget}
+                keyboardType="number-pad"
+                placeholder="目标"
+                placeholderTextColor={C.n400}
+                style={[styles.input, styles.flex]}
+              />
+              <TextInput
+                value={draftUnit}
+                onChangeText={setDraftUnit}
+                placeholder={draftType === 'duration' ? '分钟' : '杯 / 次'}
+                placeholderTextColor={C.n400}
+                style={[styles.input, styles.flex]}
+              />
+            </View>
+          ) : null}
+
+          <Text style={styles.fieldLabel}>每周重复（不选 = 每天）</Text>
+          <View style={styles.daysRow}>
+            {['一', '二', '三', '四', '五', '六', '日'].map((label, index) => {
+              const on = draftDays.includes(index);
+              return (
+                <Pressable
+                  key={label}
+                  onPress={() =>
+                    setDraftDays((prev) => (on ? prev.filter((x) => x !== index) : [...prev, index].sort((a, b) => a - b)))
+                  }
+                  style={[styles.dayChip, on && styles.segmentOn]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Text style={[styles.segmentText, on && styles.onText]}>{label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={styles.actions}>
+            <Pressable onPress={() => setCreating(false)} style={styles.ghost} accessibilityRole="button">
+              <Text style={styles.ghostText}>取消</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => void submitHabit()}
+              disabled={draftName.trim() === '' || saving}
+              style={[styles.primary, (draftName.trim() === '' || saving) && styles.primaryDisabled]}
+              accessibilityRole="button"
+            >
+              <Text style={styles.primaryText}>创建</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -128,6 +246,71 @@ function HabitRow({ habit, value, onPress, onReset, onOpen }: { habit: Habit; va
 }
 
 const styles = StyleSheet.create({
+  headLeft: { flex: 1 },
+  addBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -4,
+  },
+  addText: { fontSize: 26, color: C.a500, lineHeight: 30 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(10,10,10,0.28)' },
+  sheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: C.n0,
+    borderTopWidth: 1,
+    borderTopColor: C.n200,
+    paddingHorizontal: SP[4],
+    paddingTop: SP[2],
+    paddingBottom: SP[8],
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 3,
+    backgroundColor: C.n200,
+    borderRadius: 2,
+    marginBottom: SP[3],
+  },
+  sheetTitle: { fontSize: FONT.md, color: C.n900, fontWeight: '600', marginBottom: SP[2] },
+  input: {
+    height: HIT,
+    borderWidth: 1,
+    borderColor: C.n300,
+    borderRadius: 2,
+    paddingHorizontal: SP[3],
+    fontSize: FONT.body,
+    color: C.n900,
+    marginTop: SP[2],
+  },
+  flex: { flex: 1 },
+  inlineRow: { flexDirection: 'row', gap: SP[2] },
+  segments: { flexDirection: 'row', gap: 1, backgroundColor: C.n200, borderWidth: 1, borderColor: C.n200, marginTop: SP[2] },
+  segment: { flex: 1, height: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: C.n0 },
+  segmentOn: { backgroundColor: C.a500 },
+  segmentText: { fontSize: FONT.sm, color: C.n600 },
+  onText: { color: C.n0 },
+  fieldLabel: { marginTop: SP[3], fontSize: FONT.xs, color: C.n500 },
+  daysRow: { flexDirection: 'row', gap: SP[1], marginTop: SP[1] },
+  dayChip: {
+    flex: 1,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: C.n300,
+    borderRadius: 2,
+  },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: SP[2], marginTop: SP[4] },
+  ghost: { height: HIT, paddingHorizontal: SP[4], borderWidth: 1, borderColor: C.n300, borderRadius: 2, alignItems: 'center', justifyContent: 'center' },
+  ghostText: { fontSize: FONT.body, color: C.n700 },
+  primary: { height: HIT, paddingHorizontal: SP[6], borderRadius: 2, backgroundColor: C.a500, alignItems: 'center', justifyContent: 'center' },
+  primaryDisabled: { backgroundColor: C.n300 },
+  primaryText: { fontSize: FONT.body, color: C.n0 },
   root: { flex: 1, backgroundColor: C.n0 },
   head: { paddingHorizontal: SP[4], paddingTop: SP[4], paddingBottom: SP[3] },
   title: { fontSize: FONT.xl, color: C.n900, fontWeight: '600' },

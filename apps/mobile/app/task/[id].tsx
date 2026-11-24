@@ -50,6 +50,7 @@ export default function TaskDetailScreen() {
   const [title, setTitle] = useState(task?.title ?? '');
   const [note, setNote] = useState(task?.note ?? '');
   const [dueDate, setDueDate] = useState(task?.dueDate ?? '');
+  const [location, setLocation] = useState(task?.location ?? '');
   const [tagInput, setTagInput] = useState('');
   // 必须在这里声明，不能放到 early return 之后：hooks 的数量在每次渲染里都要一致，
   // task 不存在时提前 return 会让两者不等，React 直接抛 "Rendered fewer hooks"
@@ -62,6 +63,7 @@ export default function TaskDetailScreen() {
     setTitle(task.title);
     setNote(task.note ?? '');
     setDueDate(task.dueDate ?? '');
+    setLocation(task.location ?? '');
     // 同步拉取可能在页面打开后才改了规则，这里要跟着刷
     setRepeatDays(task.rrule ? (parseRrule(task.rrule).byDay ?? []) : []);
     setRepeatUntil(task.rrule && parseRrule(task.rrule).until ? dateInput(task.rrule ? parseRrule(task.rrule).until! : 0) : '');
@@ -238,6 +240,27 @@ export default function TaskDetailScreen() {
           <Text style={styles.hint}>新建时默认落在 04，方便先收下来再分类。</Text>
         </Section>
 
+        <Section title="优先级">
+          <View style={styles.row}>
+            {[0, 1, 2, 3].map((level) => {
+              const on = task.priority === level;
+              return (
+                <Pressable
+                  key={level}
+                  onPress={() => void patchTask(task.id, { priority: level })}
+                  style={[styles.chip, on && styles.chipOn]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Text style={[styles.chipText, on && styles.onText]}>
+                    {['无', '低', '中', '高'][level]}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Section>
+
         <Section title="日期">
           <View style={styles.row}>
             {[
@@ -326,6 +349,20 @@ export default function TaskDetailScreen() {
           <Text style={styles.hint}>
             重复以第一条的日期为锚点。改日期后再点一次重复，才会按新日期重算。
           </Text>
+        </Section>
+
+        <Section title="地点">
+          <TextInput
+            value={location}
+            onChangeText={setLocation}
+            onBlur={() => {
+              const next = location.trim() === '' ? null : location.trim();
+              if (next !== task.location) void patchTask(task.id, { location: next });
+            }}
+            placeholder="可留空"
+            placeholderTextColor={C.n400}
+            style={styles.input}
+          />
         </Section>
 
         <Section title="标签">

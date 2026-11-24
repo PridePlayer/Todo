@@ -15,6 +15,14 @@ import { C, FONT, HIT, SP } from '../../src/theme';
 type Status = 'open' | 'done' | 'all';
 type GroupMode = 'flat' | 'tag';
 type ViewMode = 'list' | 'gantt';
+type SortMode = 'manual' | 'created' | 'priority' | 'completed';
+
+const SORT_LABEL: Record<SortMode, string> = {
+  manual: '手动',
+  created: '创建',
+  priority: '优先级',
+  completed: '完成时间',
+};
 
 const STATUS_LABEL: Record<Status, string> = { open: '未完成', done: '已完成', all: '全部' };
 const NO_TAG = '__none__';
@@ -35,6 +43,7 @@ export default function ListScreen() {
   const [mode, setMode] = useState<GroupMode>('flat');
   // 甘特是列表的另一种排布，不是独立 tab：底部一排已经 5 个，再加一格就多一次跨页跳转
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [sort, setSort] = useState<SortMode>('manual');
 
   const tagName = useMemo(() => {
     const map = new Map(snapshot.tags.map((tag) => [tag.id, tag.name]));
@@ -81,9 +90,18 @@ export default function ListScreen() {
   const sections = useMemo(() => {
     if (mode === 'flat') {
       const sorted = [...filtered].sort((a, b) => {
-        // 完成的按完成时间倒序排到最前，未完成的仍按象限/手动顺序
         const av = a.completedAt ?? -1;
         const bv = b.completedAt ?? -1;
+        if (sort === 'completed') {
+          // 完成的按完成时间倒序；未完成的没有 completedAt，自然沉底
+          if (av !== bv) return bv - av;
+          return a.quadrant - b.quadrant || a.sortOrder - b.sortOrder;
+        }
+        if (sort === 'created') return b.createdAt - a.createdAt;
+        if (sort === 'priority') {
+          if (a.priority !== b.priority) return b.priority - a.priority;
+          return a.quadrant - b.quadrant || a.sortOrder - b.sortOrder;
+        }
         if (av !== bv) return bv - av;
         return a.quadrant - b.quadrant || a.sortOrder - b.sortOrder;
       });
@@ -106,7 +124,7 @@ export default function ListScreen() {
     }
     rows.sort((a, b) => (a.key === NO_TAG ? 1 : b.key === NO_TAG ? -1 : a.title.localeCompare(b.title)));
     return rows;
-  }, [filtered, mode, tagName]);
+  }, [filtered, mode, tagName, sort]);
 
   const openCount = filtered.filter((t) => t.completedAt === null).length;
 
@@ -270,6 +288,26 @@ export default function ListScreen() {
             accessibilityState={{ selected: dateFilter === opt.value }}
           >
             <Text style={[styles.chipText, dateFilter === opt.value && styles.chipTextOn]}>{opt.label}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.dateScroll}
+        contentContainerStyle={styles.dateRow}
+      >
+        <Text style={styles.sortLabel}>排序</Text>
+        {(['manual', 'created', 'priority', 'completed'] as SortMode[]).map((key) => (
+          <Pressable
+            key={key}
+            onPress={() => setSort(key)}
+            style={[styles.chip, sort === key && styles.chipOn]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: sort === key }}
+          >
+            <Text style={[styles.chipText, sort === key && styles.chipTextOn]}>{SORT_LABEL[key]}</Text>
           </Pressable>
         ))}
       </ScrollView>
@@ -459,6 +497,7 @@ const styles = StyleSheet.create({
   dateScroll: { height: 44, flexGrow: 0, flexShrink: 0 },
   dateRow: { gap: SP[2], paddingHorizontal: SP[4], alignItems: 'center', height: '100%' },
   metaToday: { color: C.a500, fontWeight: '600' },
+  sortLabel: { fontSize: FONT.xs, color: C.n500, marginRight: SP[1] },
   tagScroll: { height: 48, flexGrow: 0, flexShrink: 0 },
   tagRow: { gap: SP[2], paddingHorizontal: SP[4], alignItems: 'center', height: '100%' },
   chip: {
