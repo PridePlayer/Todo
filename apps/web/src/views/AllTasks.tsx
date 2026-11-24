@@ -99,6 +99,9 @@ export function AllTasksView() {
       if (!task.rrule || task.completedAt !== null) continue;
       const anchor = task.startAt ?? (task.dueDate ? new Date(`${task.dueDate}T00:00:00`).getTime() : null);
       if (anchor === null) continue;
+      // from 取任务创建以来，不能是 0：从 1970 年展开会被远古实例占满 limit，
+      // 最近的过期实例取不到，界面表现为"有的能跳过、有的点不动"
+      const from = Math.max(task.createdAt, todayStart - 90 * 86_400_000);
       const occurrences = expandSeries(
         {
           id: task.id,
@@ -111,9 +114,9 @@ export function AllTasksView() {
           kind: 'task',
           origin: null,
         },
-        0,
+        from,
         todayStart,
-        60,
+        200,
       );
       for (const occ of occurrences) {
         if (occ.start >= todayStart) continue;
