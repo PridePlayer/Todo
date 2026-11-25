@@ -13,6 +13,7 @@ import { habitRoutes } from './routes/habits.js';
 import { healthRoutes } from './routes/health.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { syncRoutes } from './routes/sync.js';
+import { widgetRoutes } from './routes/widget.js';
 import { VERSION } from './version.js';
 
 export interface AppDeps {
@@ -121,6 +122,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(calendarRoutes, { prefix: '/api', db, env, tokens: deps.tokens ?? null });
   await app.register(habitRoutes, { prefix: '/api', db, env });
   await app.register(deviceRoutes, { prefix: '/api', db, env });
+  await app.register(widgetRoutes, { prefix: '/api', db, env });
   await app.register(exportRoutes, { prefix: '/api', db, env });
 
   return app;

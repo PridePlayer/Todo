@@ -2,8 +2,10 @@ import {
   HABIT_TYPES,
   computeStreak,
   defaultTarget,
+  formatMinuteOfDay,
   habitUnit,
   isScheduled,
+  parseMinuteOfDay,
   progressOf,
   reached,
   type Habit,
@@ -11,7 +13,7 @@ import {
   type HabitType,
 } from '@grid/core';
 import { useMemo, useState } from 'react';
-import { archiveHabit, bumpToday, createHabit, setLog, todayKey, toggleCheck } from '../db/habits';
+import { archiveHabit, createHabit, setLog, todayKey, toggleCheck } from '../db/habits';
 import { useHabitLogs, useHabits } from '../hooks/useStore';
 import { HabitDetail } from './HabitDetail';
 import styles from './habits.module.css';
@@ -140,7 +142,11 @@ export function HabitsView() {
                 onClick={() => {
                   if (habit.type === 'check') void toggleCheck(habit, today);
                   else if (done) void setLog(habit, today, { value: 0 });
-                  else void setLog(habit, today, { value: habit.target });
+                  // 与手机端一致：点一下加一步，不是一次填满。
+                  // 之前这里直接写 habit.target，于是"Web 点一下 2/2、手机点一下 1/2"，
+                  // 同一个动作两种结果 —— 用户没法理解这个差异。
+                  // 想一次到满用右边的「满」。
+                  else void setLog(habit, today, { value: Math.min(habit.target, value + STEP[habit.type]) });
                 }}
               >
                 {done ? '✓' : ''}
@@ -154,6 +160,7 @@ export function HabitsView() {
                   {scheduleText(habit.daysOfWeek)}
                   {habit.type !== 'check' ? ` · 目标 ${habit.target} ${unit}` : ''}
                   {streak.current > 0 ? ` · 连续 ${streak.current} 天` : ''}
+                  {habit.remindMinute !== null ? ` · 提醒 ${formatMinuteOfDay(habit.remindMinute)}` : ''}
                   {scheduledToday ? '' : ' · 今天不必做'}
                 </span>
               </div>
@@ -205,10 +212,10 @@ export function HabitsView() {
                     type="button"
                     className={styles.mini}
                     disabled={done}
-                    onClick={() => void bumpToday(habit, today)}
-                    title={`加 ${STEP[habit.type]} ${unit}`}
+                    onClick={() => void setLog(habit, today, { value: habit.target })}
+                    title={`直接填满到 ${habit.target} ${unit}`}
                   >
-                    ＋{STEP[habit.type]}
+                    满
                   </button>
                 ) : null}
                 <button
@@ -275,6 +282,8 @@ interface FormProps {
     target?: number;
     unit?: string | null;
     daysOfWeek?: number[];
+    /** 一天中的第几分钟，null = 不提醒 */
+    remindMinute?: number | null;
   }) => Promise<void>;
 }
 
@@ -284,6 +293,7 @@ function HabitForm({ onCancel, onCreate }: FormProps) {
   const [target, setTarget] = useState(String(defaultTarget('check')));
   const [unit, setUnit] = useState('');
   const [days, setDays] = useState<Set<number>>(new Set());
+  const [remind, setRemind] = useState('');
   const [busy, setBusy] = useState(false);
 
   const toggleDay = (day: number): void => {
@@ -309,10 +319,12 @@ function HabitForm({ onCancel, onCreate }: FormProps) {
           target: Number(target) || undefined,
           unit: unit.trim() === '' ? null : unit.trim(),
           daysOfWeek: [...days],
+          remindMinute: remind === '' ? null : parseMinuteOfDay(remind),
         })
           .then(() => {
             setName('');
             setDays(new Set());
+            setRemind('');
             setBusy(false);
           })
           .catch(() => setBusy(false));
@@ -368,6 +380,20 @@ function HabitForm({ onCancel, onCreate }: FormProps) {
             )}
           </>
         ) : null}
+      </div>
+
+      <div className={styles.formRow}>
+        <span className={styles.formLabel}>提醒</span>
+        <input
+          className={styles.dateInput}
+          type="time"
+          value={remind}
+          onChange={(event) => setRemind(event.target.value)}
+          aria-label="每日提醒时间"
+        />
+        <span className={styles.formHint}>
+          {remind === '' ? '不提醒' : `每天 ${remind} 在手机上提醒`}
+        </span>
       </div>
 
       <div className={styles.formRow}>

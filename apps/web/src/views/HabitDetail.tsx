@@ -1,9 +1,11 @@
 import {
   computeStreak,
   dateKeyInZone,
+  formatMinuteOfDay,
   formatRate,
   habitUnit,
   heatmapWeeks,
+  parseMinuteOfDay,
   rateBuckets,
   reached,
   type Habit,
@@ -11,7 +13,7 @@ import {
 } from '@grid/core';
 import { useMemo, useState } from 'react';
 import { Heatmap } from '../components/Heatmap';
-import { archiveHabit, deleteHabit, deleteLog, setLog, todayKey } from '../db/habits';
+import { archiveHabit, deleteHabit, deleteLog, patchHabit, setLog, todayKey } from '../db/habits';
 import styles from './habits.module.css';
 
 const WEEK_LABEL = ['一', '二', '三', '四', '五', '六', '日'];
@@ -143,6 +145,39 @@ export function HabitDetail({ habit, logs, onBack }: HabitDetailProps) {
             {derived.rates.all.done}/{derived.rates.all.expected} 项
           </span>
         </div>
+      </section>
+
+      <section className={styles.block}>
+        <h2 className={styles.blockTitle}>每日提醒</h2>
+        <div className={styles.recordForm}>
+          <input
+            className={styles.dateInput}
+            type="time"
+            defaultValue={habit.remindMinute === null ? '' : formatMinuteOfDay(habit.remindMinute)}
+            aria-label="每日提醒时间"
+            onChange={(event) => {
+              const minute = parseMinuteOfDay(event.target.value);
+              // 清空输入 = 取消提醒。不这样的话用户只能靠"取消提醒"按钮，
+              // 而那个按钮在时间已经清空时看起来是多余的
+              void patchHabit(habit.id, { remindMinute: minute });
+            }}
+          />
+          <button
+            type="button"
+            className={styles.ghost}
+            onClick={() => void patchHabit(habit.id, { remindMinute: null })}
+          >
+            取消提醒
+          </button>
+          <span className={styles.formHint}>
+            {habit.remindMinute === null
+              ? '没有设置提醒。'
+              : `每天 ${formatMinuteOfDay(habit.remindMinute)} 提醒`}
+          </span>
+        </div>
+        <p className={styles.formHint}>
+          提醒是手机上的本地闹钟，不经过服务器 —— 所以要在 App 里给通知权限才会响。
+        </p>
       </section>
 
       <section className={styles.block}>

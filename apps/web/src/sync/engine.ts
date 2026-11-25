@@ -482,6 +482,8 @@ function toTask(id: string, rev: number, payload: Record<string, unknown>): Task
     sortOrder: Number(payload.sortOrder ?? 0) || 0,
     rrule: str(payload.rrule),
     remindAt: numOrNull(payload.remindAt),
+    // 服务端可能还没返回这个字段（旧版本 / 老数据），兜成 null = 不提醒
+    remindLeadMinutes: numOrNull(payload.remindLeadMinutes),
     createdAt: numOrNull(payload.createdAt) ?? now,
     updatedAt: numOrNull(payload.updatedAt) ?? now,
     deletedAt: numOrNull(payload.deletedAt),
@@ -538,6 +540,7 @@ function toHabit(id: string, rev: number, payload: Record<string, unknown>, dele
       : [],
     colorKey: clampColor(Number(payload.colorKey ?? 0)),
     sortOrder: Number(payload.sortOrder ?? 0) || 0,
+    remindMinute: numOrNull(payload.remindMinute),
     archivedAt: numOrNull(payload.archivedAt),
     createdAt: numOrNull(payload.createdAt) ?? now,
     updatedAt: numOrNull(payload.updatedAt) ?? now,

@@ -26,6 +26,13 @@ export const habitSchema = z.object({
   /** 0..5，灰阶档位，与标签/日历共用同一套色阶 */
   colorKey: z.number().int(),
   sortOrder: z.number().int(),
+  /**
+   * 一天中的第几分钟（0..1439）提醒打卡，null = 不提醒。
+   *
+   * 存时刻而不是时间戳：打卡提醒是"每天 21:00"，与日期无关。
+   * 存时间戳的话每过一天就得重新排一次，而"排程失败"是完全静默的。
+   */
+  remindMinute: z.number().int().min(0).max(1439).nullable().default(null),
   /** 归档后不再出现在今日列表，但历史与统计保留 */
   archivedAt: z.number().int().nullable(),
   createdAt: z.number().int(),
@@ -40,6 +47,7 @@ export const newHabitSchema = habitSchema.pick({ name: true, type: true }).exten
   target: z.number().int().positive().max(1000).optional(),
   unit: z.string().max(8).nullable().optional(),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+  remindMinute: z.number().int().min(0).max(1439).nullable().optional(),
 });
 export type NewHabit = z.infer<typeof newHabitSchema>;
 

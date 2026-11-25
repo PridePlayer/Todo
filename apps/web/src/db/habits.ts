@@ -35,6 +35,8 @@ export interface HabitDraft {
   /** 空数组 = 每天 */
   daysOfWeek?: number[];
   colorKey?: number;
+  /** 一天中的第几分钟（0..1439）提醒打卡，null = 不提醒 */
+  remindMinute?: number | null;
 }
 
 function habitFields(habit: Habit): Record<string, unknown> {
@@ -45,6 +47,7 @@ function habitFields(habit: Habit): Record<string, unknown> {
     unit: habit.unit,
     daysOfWeek: habit.daysOfWeek,
     colorKey: habit.colorKey,
+    remindMinute: habit.remindMinute,
     sortOrder: habit.sortOrder,
     archivedAt: habit.archivedAt,
     createdAt: habit.createdAt,
@@ -82,6 +85,7 @@ export async function createHabit(draft: HabitDraft): Promise<Habit> {
     daysOfWeek: [...new Set(draft.daysOfWeek ?? [])].filter((d) => d >= 0 && d <= 6).sort((a, b) => a - b),
     colorKey: draft.colorKey ?? 0,
     sortOrder,
+    remindMinute: draft.remindMinute ?? null,
     archivedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -101,7 +105,9 @@ async function nextSortOrder(): Promise<number> {
   return max + 1;
 }
 
-export type HabitPatch = Partial<Pick<Habit, 'name' | 'target' | 'unit' | 'daysOfWeek' | 'colorKey' | 'sortOrder'>>;
+export type HabitPatch = Partial<
+  Pick<Habit, 'name' | 'target' | 'unit' | 'daysOfWeek' | 'colorKey' | 'sortOrder' | 'remindMinute'>
+>;
 
 export async function patchHabit(id: string, patch: HabitPatch): Promise<void> {
   const row = await db.habits.get(id);
@@ -129,6 +135,14 @@ export async function patchHabit(id: string, patch: HabitPatch): Promise<void> {
   }
   if (patch.colorKey !== undefined) put('colorKey', Math.min(5, Math.max(0, Math.trunc(patch.colorKey))));
   if (patch.sortOrder !== undefined) put('sortOrder', patch.sortOrder);
+  if (patch.remindMinute !== undefined) {
+    // null = 取消提醒；数字夹到 0..1439（一天内的分钟数）
+    const minute =
+      patch.remindMinute === null
+        ? null
+        : Math.min(1439, Math.max(0, Math.trunc(Number(patch.remindMinute))));
+    put('remindMinute', minute);
+  }
 
   if (Object.keys(fields).length === 0) return;
 

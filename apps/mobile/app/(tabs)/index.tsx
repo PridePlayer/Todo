@@ -22,6 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useApp } from '../../src/store';
+import { localTodayKey, splitToday } from '../../src/domain/today';
 import { C, FONT, HIT, SP } from '../../src/theme';
 
 const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
@@ -37,11 +38,9 @@ export default function TodayScreen() {
   const [title, setTitle] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  const todayKey = useMemo(() => {
-    const d = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  }, []);
+  // 口径与桌面小组件共用一份（src/domain/today.ts）：两边各写一套筛选，
+  // 迟早会出现"首屏说还有 5 条、小组件说 3 条"，而这种不一致一眼就能被看见
+  const todayKey = useMemo(() => localTodayKey(), []);
 
   /**
    * 今日页只放"今天要做的事"，分三段：
@@ -52,43 +51,7 @@ export default function TodayScreen() {
    * 未来日期的任务**不出现**：它们属于"以后"，塞进今日只会让这一页
    * 变成"全部任务"的别名 —— 这正是之前的问题。
    */
-  const sections = useMemo(() => {
-    const keyOf = (ts: number) => {
-      const d = new Date(ts);
-      const pad = (n: number) => String(n).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    };
-    // 先按象限（1 最重要），再按手动排序
-    const byQuadrant = (a: Task, b: Task) => a.quadrant - b.quadrant || a.sortOrder - b.sortOrder;
-
-    const overdue: Task[] = [];
-    const dueToday: Task[] = [];
-    const inbox: Task[] = [];
-
-    for (const task of snapshot.tasks) {
-      if (task.completedAt !== null) continue;
-      const hasTime = task.startAt !== null;
-      const startIsToday = hasTime && keyOf(task.startAt!) === todayKey;
-      const due = task.dueDate;
-
-      if (due !== null && due < todayKey) {
-        overdue.push(task);
-        continue;
-      }
-      if (due === todayKey || startIsToday) {
-        dueToday.push(task);
-        continue;
-      }
-      // 既没日期也没时间 → 收件箱；有未来日期的直接跳过
-      if (due === null && !hasTime) inbox.push(task);
-    }
-
-    return {
-      overdue: overdue.sort(byQuadrant),
-      dueToday: dueToday.sort((a, b) => (a.startAt ?? 0) - (b.startAt ?? 0) || byQuadrant(a, b)),
-      inbox: inbox.sort(byQuadrant),
-    };
-  }, [snapshot.tasks, todayKey]);
+  const sections = useMemo(() => splitToday(snapshot.tasks, todayKey), [snapshot.tasks, todayKey]);
 
   type Item =
     | { kind: 'header'; key: string; title: string; count: number }

@@ -13,7 +13,6 @@ import {
   type CalEvent,
   type Habit,
   type HabitLog,
-  type Hlc,
   type RecurException,
   type SyncOp,
   type Tag,
@@ -21,13 +20,18 @@ import {
   type TaskList,
 } from '@grid/core';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { createApiClient, ApiError } from '@grid/core';
+import { ApiError } from '@grid/core';
 import { currentAuth, clearAuth, ensureDeviceId, loadAuth, rememberedEmail, saveAuth, type AuthState } from './auth';
+import { makeApiClient } from './api';
+import { checkHabit as writeHabitCheck, toggleTaskComplete } from './domain/toggle';
+import { nextHlc } from './hlc';
+import { cancelAllReminders, rescheduleReminders } from './notify/schedule';
+import { publishWidgetToHomeScreen } from './widget/publish';
+import { readWidgetToken, saveWidgetToken } from './widget/data';
 import { currentApiBase, loadApiBase } from './config';
+import { flushOutbox } from './sync/push';
 import {
   applyChanges,
-  bumpRev,
-  dropOps,
   getMeta,
   loadAll,
   loadOps,
@@ -72,6 +76,7 @@ export interface NewTaskInput {
   note?: string | null;
   listId?: string;
   location?: string | null;
+  remindLeadMinutes?: number | null;
 }
 
 interface AppState {
@@ -87,6 +92,8 @@ interface AppState {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
+  /** 清空本地镜像并全量重拉：修"两端数字对不上且不自愈" */
+  forceResync: () => Promise<void>;
   toggleTask: (id: string) => Promise<void>;
   createTask: (input: NewTaskInput) => Promise<string>;
   patchTask: (id: string, patch: Record<string, unknown>) => Promise<void>;
@@ -119,26 +126,8 @@ interface AppState {
 
 const Ctx = createContext<AppState | null>(null);
 
-/** HLC：墙钟前进则计数清零，否则累加，保证同一毫秒内多次改动也有全序 */
-let hlcWall = 0;
-let hlcCounter = 0;
-function nextHlc(device: string): Hlc {
-  const now = Date.now();
-  if (now > hlcWall) {
-    hlcWall = now;
-    hlcCounter = 0;
-  } else {
-    hlcCounter += 1;
-  }
-  return { wall: hlcWall, counter: hlcCounter, device };
-}
-
 function api() {
-  return createApiClient({
-    baseUrl: `${currentApiBase()}/api`,
-    // 每次现取：令牌静默轮换后不需要重启 App
-    authToken: () => currentAuth()?.token ?? null,
-  });
+  return makeApiClient();
 }
 
 function decode(rows: DocRow[]): Snapshot {
@@ -210,9 +199,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [remembered, setRemembered] = useState<string | null>(null);
   const [apiBase, setApiBase] = useState(currentApiBase());
 
-  // 同一时刻只允许一个 flush 在飞：并发 push 会让同一条 op 被提交两次，
-  // 服务端虽然有 opId 幂等，但客户端两边的 rev 更新会互相覆盖
-  const flushing = useRef(false);
+  // 并发锁现在在 ./sync/push.ts 的模块级（widget 与 App 共享同一个锁）
 
   /**
    * 全局一次性提示。
@@ -231,37 +218,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     const rows = await loadAll();
-    setSnapshot(decode(rows));
+    const next = decode(rows);
+    setSnapshot(next);
     const ops = await loadOps();
     setPending(ops.length);
+    // 顺手把桌面小组件刷成最新：updatePeriodMillis 的下限是 30 分钟，
+    // 不主动推的话"App 里刚勾完、桌面还挂着"会被当成 bug
+    void publishWidgetToHomeScreen({ tasks: next.tasks, habits: next.habits, logs: next.logs });
+    // 提醒跟着数据重排。内部有指纹去重：数据没变直接返回，不会每 30 秒调一次原生接口
+    void rescheduleReminders(next.tasks, next.habits);
   }, []);
 
   const flush = useCallback(async () => {
-    if (flushing.current) return;
-    flushing.current = true;
+    // 推送逻辑搬到了 ./sync/push.ts —— 桌面小组件的 headless 任务也要用它，
+    // 而那里没有 React 上下文。错误仍然往外抛，refresh 要靠它区分离线与真错误。
+    const outcome = await flushOutbox();
+    if (outcome.rejected.length > 0) {
+      setLastError(outcome.rejected[0]!.reason);
+    }
+  }, []);
+
+  /**
+   * 小组件只读令牌的续签。
+   *
+   * 为什么放在 refresh 里而不是登录时一次：令牌 90 天过期，而 App 可能连续几个月
+   * 不被"重新登录"（设备令牌 180 天，临期还会静默轮换）。只在登录时签发的话，
+   * 第 91 天桌面上的 widget 会突然变成"登录已过期"，而用户什么都没做错。
+   *
+   * 快到期才真发请求，其余时候只读一次 sqlite 就返回。
+   */
+  const ensureWidgetToken = useCallback(async () => {
+    if (!currentAuth()) return;
     try {
-      const ops = await loadOps();
-      if (ops.length === 0) return;
-      const device = await ensureDeviceId();
-      const res = await api().syncPush({ deviceId: device, ops: ops.map((o) => o.body) });
-      const done: string[] = [];
-      for (const result of res.results) {
-        if (result.status === 'applied' || result.status === 'duplicate' || result.status === 'conflict') {
-          done.push(result.opId);
-          const op = ops.find((o) => o.opId === result.opId);
-          // 服务端给了新 rev 就跟上，否则下一次 push 的 baseRev 永远是旧的 → 一直被当成冲突
-          if (op && typeof result.rev === 'number' && result.rev > 0) {
-            await bumpRev(op.body.table, op.body.id, result.rev);
-          }
-        } else if (result.status === 'rejected') {
-          // 被拒的不能留：留着每次同步都重试，且永远失败
-          done.push(result.opId);
-          setLastError(result.reason ?? '有一条改动被服务端拒绝');
-        }
-      }
-      await dropOps(done);
-    } finally {
-      flushing.current = false;
+      const existing = await readWidgetToken();
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
+      if (existing && existing.expiresAt - Date.now() > sevenDays) return;
+      const issued = await api().createWidgetToken();
+      await saveWidgetToken(issued);
+    } catch (err) {
+      // 签不出令牌不该让同步失败：widget 会退回只读缓存，而 App 本身一切正常
+      console.warn('[widget] token issue failed', err);
     }
   }, []);
 
@@ -293,6 +289,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await reload();
       setLastSyncAt(Date.now());
       setPhase('idle');
+      void ensureWidgetToken();
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         await clearAuth();
@@ -305,7 +302,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLastError(err instanceof Error ? err.message : '同步失败');
       await reload();
     }
-  }, [flush, reload]);
+  }, [flush, reload, ensureWidgetToken]);
 
   // ── 启动 ──
   useEffect(() => {
@@ -352,6 +349,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     await clearAuth();
     await wipe();
+    // 不清提醒的话，换账号之后还会收到上一个人的待办标题 —— 这是最不该出现的泄露
+    await cancelAllReminders();
     setAuth(null);
     setSnapshot(EMPTY);
     setLastSyncAt(null);
@@ -363,67 +362,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
    const task = snapshot.tasks.find((t) => t.id === id);
    if (!task) return;
    try {
-    const device = await ensureDeviceId();
-
-    // 重复任务勾选完成 ≠ 终态。
-    // 直接把 completedAt 写死会让整条记录从列表里消失，用户再也看不到下一次；
-    // 正确语义是"这一次做完了，母体滚到下一个重复日"。
-    if (task.rrule !== null && task.completedAt === null) {
-      const patch = nextOccurrencePatch(task, snapshot.exceptions);
-      if (patch !== null) {
-        const next: Task = { ...task, ...patch, updatedAt: Date.now() };
-        await putRow('task', id, task.rev, next as unknown as Record<string, unknown>);
-        await queueOp({
-          opId: ulid(),
-          table: 'task',
-          action: 'update',
-          id,
-          baseRev: task.rev,
-          fields: patch as unknown as Record<string, unknown>,
-          base: {
-            dueDate: task.dueDate,
-            startAt: task.startAt,
-            endAt: task.endAt,
-            allDay: task.allDay,
-          },
-          hlc: nextHlc(device),
-        });
-        setSnapshot((prev) => ({ ...prev, tasks: prev.tasks.map((t) => (t.id === id ? next : t)) }));
-        setPending((n) => n + 1);
-        showFlash(`已跳到 ${patch.dueDate ?? '下一次'}（重复任务不会整条消失）`);
-        void refresh();
-        return;
-      }
-      // 规则已经结束（COUNT 用完 / 超过 UNTIL）→ 落到下面的普通完成逻辑
-    }
-
-    const nextCompleted = task.completedAt === null ? Date.now() : null;
-    const payload = { ...task, completedAt: nextCompleted };
-    // rev 不动：本地 rev 必须始终等于"服务端已知版本"，
-    // 自己 +1 会让下一次 push 的 baseRev 高于服务端，永远冲突
-    await putRow('task', id, task.rev, payload as unknown as Record<string, unknown>);
-    await queueOp({
-      opId: ulid(),
-      table: 'task',
-      action: 'update',
-      id,
-      baseRev: task.rev,
-      fields: { completedAt: nextCompleted },
-      base: { completedAt: task.completedAt },
-      hlc: nextHlc(device),
-    });
+    // 语义（含重复任务推进）在 ./domain/toggle.ts，与桌面小组件共用同一份
+    const result = await toggleTaskComplete(task, snapshot.exceptions);
     setSnapshot((prev) => ({
       ...prev,
-      tasks: prev.tasks.map((t) => (t.id === id ? { ...t, completedAt: nextCompleted } : t)),
+      tasks: prev.tasks.map((t) => (t.id === id ? result.task : t)),
     }));
     setPending((n) => n + 1);
+    if (result.advanced) showFlash(result.message);
     void refresh();
    } catch (err) {
      // 以前这里是 void Promise，异常被静默吞掉，界面表现就是"点了没反应"
      console.warn('[toggle]', err);
      showFlash(`操作失败：${err instanceof Error ? err.message : String(err)}`);
    }
-  }, [refresh, snapshot.tasks, showFlash]);
+  }, [refresh, snapshot.tasks, snapshot.exceptions, showFlash]);
 
   const createTask = useCallback(async (input: NewTaskInput) => {
     const trimmed = input.title.trim();
@@ -458,6 +411,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sortOrder: -now,
       rrule: input.rrule ?? null,
       remindAt: null,
+      remindLeadMinutes: input.remindLeadMinutes ?? null,
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
@@ -650,7 +604,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const createHabit = useCallback(
-    async (input: { name: string; type: 'check' | 'count' | 'duration'; target: number; unit: string | null; daysOfWeek: number[] }) => {
+    async (input: {
+      name: string;
+      type: 'check' | 'count' | 'duration';
+      target: number;
+      unit: string | null;
+      daysOfWeek: number[];
+      remindMinute?: number | null;
+    }) => {
       const name = input.name.trim();
       if (name === '') return;
       const device = await ensureDeviceId();
@@ -665,6 +626,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         daysOfWeek: [...input.daysOfWeek].sort((a, b) => a - b),
         colorKey: 0,
         sortOrder: -now,
+        remindMinute: input.remindMinute ?? null,
         archivedAt: null,
         createdAt: now,
         updatedAt: now,
@@ -773,77 +735,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
   /**
    * 打卡。
    *
-   * 计数型是"加上去"而不是"设成某个值"，所以必须读当前值再算，
-   * 并且主键用 core 的 habitLogId(habitId, logDate) —— 确定性主键让
-   * "两台设备同一天各点一次"撞成同一行，服务端才能按 max 合并。
+   * 写入语义（确定性主键、算到 0 要删行）在 ./domain/toggle.ts，与桌面小组件共用。
+   * 这里只负责把结果映射回界面状态。
    */
   const checkHabit = useCallback(
     async (habitId: string, logDate: string, delta: number) => {
       const { habitLogId } = await import('@grid/core');
       const id = habitLogId(habitId, logDate);
       const existing = snapshot.logs.find((log) => log.id === id) ?? null;
-      const device = await ensureDeviceId();
-      const now = Date.now();
-      const nextValue = Math.max(0, (existing?.value ?? 0) + delta);
+      const result = await writeHabitCheck(habitId, logDate, existing, delta);
+      const settled = result.log;
 
-      // 算到 0 就是"取消打卡"，必须**删掉这条记录**，不能写 value=0。
-      //
-      // 服务端对 habit_log.value 的合并是 GREATEST(local, remote) —— 那条规则
-      // 正确地挡住了"两台设备各点一次被相加"，但也同样挡住了"把数字改小"：
-      // 推上去的 0 会被服务端现有的 1 又并回来，界面表现为"取消了又自己打回来"。
-      // 删除是幂等的、能传播的，且与 max 合并不冲突。
-      //
-      // 代价：计数型只能往上加，想减少就只能清零。这是合并语义本身决定的，
-      // 而不是 UI 偷懒 —— 见 docs/03 §4.5。
-      if (nextValue <= 0) {
-        if (!existing) return;
-        await softDeleteRow('habit_log', id, now);
-        await queueOp({
-          opId: ulid(),
-          table: 'habit_log',
-          action: 'delete',
-          id,
-          baseRev: existing.rev,
-          fields: {},
-          hlc: nextHlc(device),
-        });
-        setSnapshot((prev) => ({ ...prev, logs: prev.logs.filter((l) => l.id !== id) }));
-        setPending((n) => n + 1);
-        void refresh();
-        return;
-      }
-
-      const next: HabitLog = {
-        id,
-        habitId,
-        logDate,
-        value: nextValue,
-        backfilled: false,
-        note: existing?.note ?? null,
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-        deletedAt: null,
-        rev: existing?.rev ?? 1,
-      };
-      await putRow('habit_log', id, existing?.rev ?? 1, next as unknown as Record<string, unknown>);
-      await queueOp({
-        opId: ulid(),
-        table: 'habit_log',
-        action: existing ? 'update' : 'create',
-        id,
-        baseRev: existing?.rev ?? 0,
-        fields: next as unknown as Record<string, unknown>,
-        hlc: nextHlc(device),
-      });
       setSnapshot((prev) => ({
         ...prev,
-        logs: existing ? prev.logs.map((l) => (l.id === id ? next : l)) : [...prev.logs, next],
+        logs: settled
+          ? existing
+            ? prev.logs.map((log) => (log.id === id ? settled : log))
+            : [...prev.logs, settled]
+          : prev.logs.filter((log) => log.id !== id),
       }));
       setPending((n) => n + 1);
       void refresh();
     },
     [refresh, snapshot.logs],
   );
+
+  /**
+   * 强制重新拉取全部数据：清空本地镜像，把游标归零，再全量 pull 一遍。
+   *
+   * 解决的是"本地与服务器数字对不上、而且不会自愈"这一类问题：
+   * 增量同步只拉 `change_seq > cursor` 的行，一旦某行的合并结果没被写回本地
+   * （旧版本就是这样：只更新 rev、不更新字段），服务端那行又因为"最终值没变"
+   * 而不产生新的 change_seq —— 这条数据就永远错位了，除非全量重拉。
+   *
+   * 顺序是刻意的：先 flush 把待推的东西推干净，推不出去就中止。
+   * 反过来做会把还没上传的改动直接抹掉。
+   */
+  const forceResync = useCallback(async () => {
+    await flushOutbox();
+    await wipe();
+    await setMeta('cursor', '0');
+    setSnapshot(EMPTY);
+    await refresh();
+  }, [refresh]);
 
   const changeApiBase = useCallback(async (value: string) => {
     const { setApiBase: persist } = await import('./config');
@@ -884,6 +818,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ensureTag,
       checkHabit,
       changeApiBase,
+      forceResync,
     }),
     [
       ready,
@@ -913,6 +848,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ensureTag,
       checkHabit,
       changeApiBase,
+      forceResync,
     ],
   );
 

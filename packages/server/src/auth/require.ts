@@ -2,7 +2,7 @@ import type { FastifyRequest } from 'fastify';
 import type { Db } from '../db/types.js';
 import type { AppEnv } from '../env.js';
 import { HttpError } from '../http/errors.js';
-import { resolveDeviceToken } from './device-token.js';
+import { resolveDeviceToken, type DeviceScope } from './device-token.js';
 import { resolveSession } from './session.js';
 
 declare module 'fastify' {
@@ -24,6 +24,13 @@ export interface Authed {
   /** 这次请求是靠 Cookie 会话还是 Bearer 设备令牌进来的 */
   via: 'session' | 'device';
   deviceTokenId: string | null;
+  /**
+   * 这把凭据能做什么。
+   *
+   * Cookie 会话与 full 设备令牌都是 'full'；只有桌面小组件那枚
+   * 只读令牌是 'widget'，且它只在 /api/widget/summary 上被显式放行。
+   */
+  scope: DeviceScope;
 }
 
 /**
@@ -48,16 +55,27 @@ export async function authenticate(db: Db, env: AppEnv, req: FastifyRequest): Pr
       throw new HttpError(401, 'device_expired', '设备授权已过期，请重新登录');
     }
     if (device.rotated) req.deviceRotatedToken = device.rotated.token;
-    return { userId: device.userId, via: 'device', deviceTokenId: device.id };
+    return { userId: device.userId, via: 'device', deviceTokenId: device.id, scope: device.scope };
   }
 
   const raw = req.cookies[env.cookieName];
   const userId = typeof raw === 'string' ? await resolveSession(db, raw, env.sessionTtlMs) : null;
   if (!userId) throw new HttpError(401, 'unauthenticated', '请先登录');
-  return { userId, via: 'session', deviceTokenId: null };
+  // 浏览器会话没有 scope 概念，它等价于全权
+  return { userId, via: 'session', deviceTokenId: null, scope: 'full' };
 }
 
-/** 只需要 userId 的调用点用这个（同步、日历、打卡三条路由都是如此） */
+/**
+ * 只需要 userId 的调用点用这个（同步、日历、打卡三条路由都是如此）。
+ *
+ * **默认拒绝**：小组件令牌在这里被挡掉，只被允许走 /api/widget/* 那条显式放行的路。
+ * 反过来写（默认放行、例外拒绝）的话，以后新增任何一个路由都会自动对小组件令牌敞开，
+ * 而这种漏洞不会有人注意到 —— 它不会报错，只会静默多开一扇门。
+ */
 export async function requireUser(db: Db, env: AppEnv, req: FastifyRequest): Promise<string> {
-  return (await authenticate(db, env, req)).userId;
+  const authed = await authenticate(db, env, req);
+  if (authed.scope !== 'full') {
+    throw new HttpError(403, 'scope_forbidden', '这个令牌只能读小组件摘要，不能访问该接口');
+  }
+  return authed.userId;
 }

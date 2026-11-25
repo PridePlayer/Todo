@@ -1,7 +1,13 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { verifyCsrfToken } from '../auth/csrf.js';
-import { issueDeviceToken, listDeviceTokens, purgeDeviceToken, revokeDeviceToken } from '../auth/device-token.js';
+import {
+  issueDeviceToken,
+  issueWidgetToken,
+  listDeviceTokens,
+  purgeDeviceToken,
+  revokeDeviceToken,
+} from '../auth/device-token.js';
 import { authenticate, requireUser } from '../auth/require.js';
 import type { Db } from '../db/types.js';
 import type { AppEnv } from '../env.js';
@@ -63,10 +69,36 @@ export async function deviceRoutes(app: FastifyInstance, deps: Deps): Promise<vo
   app.post('/devices/rotate', async (req) => {
     // 主动轮换：App 启动时发现"快到期了"可以提前换，不必等下一次请求触发静默轮换
     const authed = await authenticate(db, env, req);
+    // 必须挡：这里签的是 full 令牌，放行 widget 令牌就等于让它一步提权成全权。
+    if (authed.scope !== 'full') {
+      throw new HttpError(403, 'scope_forbidden', '小组件令牌不能轮换主令牌');
+    }
     const list = await listDeviceTokens(db, authed.userId);
     const current = list.find((item) => item.id === authed.deviceTokenId);
     const issued = await issueDeviceToken(db, authed.userId, current?.label ?? '未命名设备');
     return { id: issued.id, token: issued.token, expiresAt: issued.expiresAt };
+  });
+
+  /**
+   * 签发桌面小组件的只读令牌（docs/11 §3）。
+   *
+   * 为什么这里允许设备令牌调用，而 POST /devices 只允许 Cookie 会话：
+   * 那条规则的目的是「被偷的令牌不能凭空给自己续命」。而签发 widget 令牌
+   * 不会延长任何现有凭据的寿命 —— 它是权限更小的新一把，且签发前会吊销旧的。
+   * 被偷的 full 令牌本来就能读全部数据，多给它一把只读令牌不扩大实质权限。
+   *
+   * 反过来（要求必须是 Cookie 会话）在这条产品线上行不通：RN 里没有 Cookie 罐，
+   * App 从头到尾只持设备令牌，那小组件就永远拿不到令牌。
+   */
+  app.post('/devices/widget-token', async (req) => {
+    const authed = await authenticate(db, env, req);
+    if (authed.scope !== 'full') {
+      throw new HttpError(403, 'scope_forbidden', '小组件令牌不能再签发新令牌');
+    }
+    const issued = await issueWidgetToken(db, authed.userId);
+    req.log.info({ userId: authed.userId, deviceTokenId: issued.id }, 'widget token issued');
+    // 明文只出现这一次，之后服务端只能靠 SHA-256 比对
+    return { token: issued.token, expiresAt: issued.expiresAt };
   });
 
   app.delete('/devices/:id', async (req) => {

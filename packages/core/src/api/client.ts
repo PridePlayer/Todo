@@ -28,6 +28,7 @@ import {
   type SyncPushRequest,
   type SyncPushResponse,
 } from '../models/sync.js';
+import { widgetSummarySchema, type WidgetSummary, type WidgetSummaryQuery } from '../models/widget.js';
 
 /**
  * 客户端唯一允许抛的业务错误。
@@ -103,6 +104,10 @@ export interface ApiClient {
   createDevice(label?: string): Promise<IssuedDeviceToken>;
   /** 注销某台设备：立即失效，不等过期 */
   revokeDevice(id: string, purge?: boolean): Promise<void>;
+  /** 签发桌面小组件专用只读令牌（scope='widget'，只能读 /widget/summary） */
+  createWidgetToken(): Promise<{ token: string; expiresAt: number }>;
+  /** 小组件摘要。today/dayStart/dayEnd 必须由客户端按本地时区算好 */
+  widgetSummary(query: WidgetSummaryQuery): Promise<WidgetSummary>;
   /** 当前持有的 CSRF token（调试用） */
   currentCsrfToken(): string | null;
 }
@@ -319,6 +324,23 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
         method: 'DELETE',
         parse: z.object({ revoked: z.boolean(), purged: z.boolean().optional() }),
       });
+    },
+
+    async createWidgetToken() {
+      // 明文只出现这一次；服务端只存 SHA-256，且签发前会把旧的只读令牌全部吊销
+      return request('/devices/widget-token', {
+        method: 'POST',
+        parse: z.object({ token: z.string(), expiresAt: z.number().int() }),
+      });
+    },
+
+    async widgetSummary(query) {
+      const search = new URLSearchParams({
+        today: query.today,
+        dayStart: String(query.dayStart),
+        dayEnd: String(query.dayEnd),
+      });
+      return request(`/widget/summary?${search.toString()}`, { parse: widgetSummarySchema });
     },
 
     currentCsrfToken() {

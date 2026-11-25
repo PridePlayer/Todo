@@ -1,7 +1,9 @@
 import * as Linking from 'expo-linking';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PermissionGuide } from '../src/notify/PermissionGuide';
+import { currentPermission, type NotificationPermission } from '../src/notify/schedule';
 import { useApp } from '../src/store';
 import { C, FONT, HIT, SP } from '../src/theme';
 
@@ -26,9 +28,16 @@ function shortDate(ts: number): string {
 }
 
 export default function SettingsScreen() {
-  const { auth, phase, pending, lastSyncAt, lastError, apiBase, refresh, signOut, changeApiBase, snapshot } = useApp();
+  const { auth, phase, pending, lastSyncAt, lastError, apiBase, refresh, signOut, changeApiBase, forceResync, snapshot } = useApp();
   const [draft, setDraft] = useState(apiBase);
   const [busy, setBusy] = useState(false);
+  const [permission, setPermission] = useState<NotificationPermission>('undetermined');
+  const [guideVisible, setGuideVisible] = useState(false);
+
+  // 每次进出设置页都重新读一次：用户可能刚在系统设置里改过
+  useEffect(() => {
+    void currentPermission().then(setPermission);
+  }, [guideVisible]);
 
   async function saveBase() {
     if (draft.trim() === apiBase) return;
@@ -90,6 +99,37 @@ export default function SettingsScreen() {
           >
             <Text style={styles.btnText}>{phase === 'syncing' ? '同步中…' : '立即同步'}</Text>
           </Pressable>
+
+          <Pressable
+            onPress={() => {
+              Alert.alert(
+                '重新拉取全部数据',
+                '清空本机缓存并从服务器完整下载一遍。\n\n什么时候用：两端数字对不上、而且怎么同步都不变的时候。\n\n会先把未推送的改动推上去，推不出去会中止，不会丢数据。',
+                [
+                  { text: '取消', style: 'cancel' },
+                  {
+                    text: '开始',
+                    style: 'destructive',
+                    onPress: () => {
+                      void forceResync()
+                        .then(() => Alert.alert('完成', '已重新拉取。'))
+                        .catch((err: unknown) =>
+                          Alert.alert('没成功', err instanceof Error ? err.message : '请检查网络后重试'),
+                        );
+                    },
+                  },
+                ],
+              );
+            }}
+            disabled={phase === 'syncing'}
+            style={({ pressed }) => [styles.btn, { marginTop: SP[2] }, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.btnText}>重新拉取全部数据</Text>
+          </Pressable>
+          <Text style={styles.hint}>
+            只在「两端数字对不上且一直不同步」时用。平时不需要 —— 它会把本机缓存清空重下一遍。
+          </Text>
         </Section>
 
         <Section label="服务器地址">
@@ -114,6 +154,23 @@ export default function SettingsScreen() {
             accessibilityRole="button"
           >
             <Text style={styles.btnText}>保存地址</Text>
+          </Pressable>
+        </Section>
+
+        <Section label="提醒">
+          <Text style={styles.value}>
+            {permission === 'granted' ? '通知权限已开启' : permission === 'denied' ? '通知权限被拒绝' : '还没有请求通知权限'}
+          </Text>
+          <Text style={styles.hint}>
+            提醒是纯本地闹钟，不经过服务器。设了提醒却不会响，九成是这里的三项没配齐 —
+            尤其是「精确闹钟」和「电池白名单」，国产系统默认都会把后台闹钟掐掉。
+          </Text>
+          <Pressable
+            onPress={() => setGuideVisible(true)}
+            style={({ pressed }) => [styles.btn, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.btnText}>检查提醒权限</Text>
           </Pressable>
         </Section>
 
@@ -153,6 +210,8 @@ export default function SettingsScreen() {
 
         <Text style={styles.footer}>GRID · 自托管待办与日历</Text>
       </ScrollView>
+
+      <PermissionGuide visible={guideVisible} onClose={() => setGuideVisible(false)} />
     </SafeAreaView>
   );
 }

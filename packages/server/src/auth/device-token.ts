@@ -16,8 +16,30 @@ import { randomToken, sha256Hex, ulid } from '../util/crypto.js';
 
 /** 前缀让令牌能在日志/日志脱敏规则里被一眼认出来 */
 export const DEVICE_TOKEN_PREFIX = 'grd_';
+
+/**
+ * 令牌能做的事。
+ *
+ * full    —— App 主令牌。sync、export、日历、签发子令牌，全都能做。
+ * widget  —— 桌面小组件专用。只能读 /api/widget/summary。
+ *
+ * 为什么要分：小组件跑在 headless JS 里，令牌只能存明文（SecureStore 能否在
+ * 那个上下文解密尚未验证）。既然保管强度降了，就必须让它即使被读走也只泄露
+ * 「今天有几条待办、哪几个习惯打了卡」，而不是整个账号。
+ */
+export type DeviceScope = 'full' | 'widget';
+
+export const DEVICE_SCOPE_FULL: DeviceScope = 'full';
+export const DEVICE_SCOPE_WIDGET: DeviceScope = 'widget';
+
+/** 库里旧行的 scope 是 NULL，一律按 full 处理（迁移不回填） */
+export function normalizeScope(value: string | null | undefined): DeviceScope {
+  return value === 'widget' ? 'widget' : 'full';
+}
 /** 180 天 */
 export const DEVICE_TTL_MS = 180 * 24 * 60 * 60 * 1000;
+/** 小组件只读令牌：90 天，到期由 App 重新签发（不轮换） */
+export const WIDGET_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 /** 剩余不足 7 天就静默轮换，避免"用户某天打开 App 突然要求重新登录" */
 export const DEVICE_ROTATE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /** 旧令牌的宽限期：设备端可能还在用上一次响应之前的那份 */
@@ -36,6 +58,7 @@ export interface DeviceTokenInfo {
   /** 已吊销 / 已过期仍会列出来（设置页要显示"已失效"，否则用户以为记录丢了） */
   revokedAt: number | null;
   rotatedTo: string | null;
+  scope: DeviceScope;
 }
 
 export interface IssuedDeviceToken extends DeviceTokenInfo {
@@ -52,6 +75,7 @@ interface Row {
   expires_at: number | string;
   rotated_to: string | null;
   revoked_at: number | string | null;
+  scope: string | null;
 }
 
 function num(value: number | string | null): number | null {
@@ -68,6 +92,7 @@ function toInfo(row: Row): DeviceTokenInfo {
     expiresAt: num(row.expires_at) ?? 0,
     revokedAt: num(row.revoked_at),
     rotatedTo: row.rotated_to,
+    scope: normalizeScope(row.scope),
   };
 }
 
@@ -82,13 +107,14 @@ async function insert(
   label: string,
   ttlMs: number,
   now: number,
+  scope: DeviceScope,
 ): Promise<IssuedDeviceToken> {
   const token = `${DEVICE_TOKEN_PREFIX}${randomToken(32)}`;
   const id = ulid(now);
   await db.query(
-    'INSERT INTO device_token (id, user_id, token_hash, label, created_at, last_seen_at, expires_at, rotated_to, revoked_at) ' +
-      'VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)',
-    [id, userId, sha256Hex(token), normalizeLabel(label), now, now, now + ttlMs],
+    'INSERT INTO device_token (id, user_id, token_hash, label, created_at, last_seen_at, expires_at, rotated_to, revoked_at, scope) ' +
+      'VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)',
+    [id, userId, sha256Hex(token), normalizeLabel(label), now, now, now + ttlMs, scope],
   );
   return {
     id,
@@ -99,6 +125,7 @@ async function insert(
     expiresAt: now + ttlMs,
     revokedAt: null,
     rotatedTo: null,
+    scope,
   };
 }
 
@@ -106,8 +133,12 @@ export async function issueDeviceToken(
   db: Db,
   userId: string,
   label?: string,
+  scope: DeviceScope = DEVICE_SCOPE_FULL,
 ): Promise<IssuedDeviceToken> {
-  return insert(db, userId, normalizeLabel(label), DEVICE_TTL_MS, Date.now());
+  // 小组件令牌过期不轮换（它跑在没有响应头可读的 headless 里），所以 TTL 短一档：
+  // 180 天的明文只读令牌放在应用私有目录里，太久没有理由。
+  const ttl = scope === DEVICE_SCOPE_WIDGET ? WIDGET_TOKEN_TTL_MS : DEVICE_TTL_MS;
+  return insert(db, userId, normalizeLabel(label), ttl, Date.now(), scope);
 }
 
 /**
@@ -119,14 +150,20 @@ export async function issueDeviceToken(
 export async function resolveDeviceToken(
   db: Db,
   raw: string,
-): Promise<{ userId: string; id: string; expiresAt: number; rotated: IssuedDeviceToken | null } | null> {
+): Promise<{
+  userId: string;
+  id: string;
+  expiresAt: number;
+  scope: DeviceScope;
+  rotated: IssuedDeviceToken | null;
+} | null> {
   if (typeof raw !== 'string' || !raw.startsWith(DEVICE_TOKEN_PREFIX)) return null;
 
   const hash = sha256Hex(raw);
   if (!HASH_RE.test(hash)) return null;
 
   const rows = await db.query<Row & { token_hash: string }>(
-    'SELECT id, user_id, token_hash, label, created_at, last_seen_at, expires_at, rotated_to, revoked_at ' +
+    'SELECT id, user_id, token_hash, label, created_at, last_seen_at, expires_at, rotated_to, revoked_at, scope ' +
       'FROM device_token WHERE token_hash = ?',
     [hash],
   );
@@ -138,19 +175,22 @@ export async function resolveDeviceToken(
   if (row.revoked_at !== null || expiresAt <= now) return null;
 
   const lastSeen = num(row.last_seen_at) ?? 0;
+  const scope = normalizeScope(row.scope);
   const nearExpiry = expiresAt - now <= DEVICE_ROTATE_WINDOW_MS;
 
-  if (nearExpiry && row.rotated_to === null) {
+  // 小组件令牌不轮换：轮换后的新令牌只能通过响应头交回客户端，
+  // 而 headless JS 里没有人读那个头 —— 轮换等于静默自杀。
+  if (scope === 'full' && nearExpiry && row.rotated_to === null) {
     const rotated = await rotate(db, row, now);
     if (rotated) {
-      return { userId: row.user_id, id: row.id, expiresAt, rotated };
+      return { userId: row.user_id, id: row.id, expiresAt, scope, rotated };
     }
     // 并发下另一个请求已经轮换过：正常放行，本轮不带新令牌（对方那次响应里已给过）
   } else if (now - lastSeen > TOUCH_INTERVAL_MS) {
     await db.query('UPDATE device_token SET last_seen_at = ? WHERE id = ?', [now, row.id]);
   }
 
-  return { userId: row.user_id, id: row.id, expiresAt, rotated: null };
+  return { userId: row.user_id, id: row.id, expiresAt, scope, rotated: null };
 }
 
 /**
@@ -167,7 +207,7 @@ async function rotate(db: Db, row: Row, now: number): Promise<IssuedDeviceToken 
     );
     if (!fresh[0] || fresh[0].rotated_to !== null) return null;
 
-    const issued = await insert(tx, row.user_id, row.label, DEVICE_TTL_MS, now);
+    const issued = await insert(tx, row.user_id, row.label, DEVICE_TTL_MS, now, normalizeScope(row.scope));
     await tx.query('UPDATE device_token SET expires_at = ?, rotated_to = ? WHERE id = ?', [
       now + DEVICE_GRACE_MS,
       issued.id,
@@ -177,10 +217,27 @@ async function rotate(db: Db, row: Row, now: number): Promise<IssuedDeviceToken 
   });
 }
 
+/**
+ * 签发小组件只读令牌。
+ *
+ * 签发前把该用户之前仍未失效的 widget 令牌全部吊销：App 每次启动都可能续签，
+ * 不吊销的话表里会堆一串都能用的只读令牌，泄露面随使用时长线性扩大。
+ * 旧令牌立刻失效不会打断小组件 —— 它拿到的是本轮新签发的那把。
+ */
+export async function issueWidgetToken(db: Db, userId: string): Promise<IssuedDeviceToken> {
+  await db.query(
+    "UPDATE device_token SET revoked_at = ? WHERE user_id = ? AND scope = 'widget' AND revoked_at IS NULL",
+    [Date.now(), userId],
+  );
+  return issueDeviceToken(db, userId, '桌面小组件', DEVICE_SCOPE_WIDGET);
+}
+
 export async function listDeviceTokens(db: Db, userId: string): Promise<DeviceTokenInfo[]> {
+  // 只列全权令牌：widget 令牌是设备自己派生出来的，设置页该显示"几台设备"，
+  // 而不是同一台设备下挂着的主/子两条记录（子令牌吊销了用户也不会理解意味着什么）。
   const rows = await db.query<Row>(
-    'SELECT id, user_id, label, created_at, last_seen_at, expires_at, rotated_to, revoked_at ' +
-      'FROM device_token WHERE user_id = ? ORDER BY created_at DESC',
+    'SELECT id, user_id, label, created_at, last_seen_at, expires_at, rotated_to, revoked_at, scope ' +
+      "FROM device_token WHERE user_id = ? AND (scope IS NULL OR scope <> 'widget') ORDER BY created_at DESC",
     [userId],
   );
   return rows.map(toInfo);

@@ -169,6 +169,32 @@ export {
 } from './models/habit-log.js';
 
 export {
+  widgetSummarySchema,
+  widgetSummaryQuerySchema,
+  widgetTaskSchema,
+  widgetHabitSchema,
+  WIDGET_TASK_SLOTS,
+  WIDGET_HABIT_SLOTS,
+  WIDGET_SUMMARY_PATH,
+  type WidgetSummary,
+  type WidgetSummaryQuery,
+  type WidgetTask,
+  type WidgetHabit,
+} from './models/widget.js';
+
+export {
+  buildWidgetSummary,
+  splitTodayTasks,
+  widgetLogWindowStart,
+  WIDGET_STREAK_LOOKBACK_DAYS,
+  type BuildWidgetSummaryInput,
+  type TodayBuckets,
+  type WidgetHabitLike,
+  type WidgetLogLike,
+  type WidgetTaskLike,
+} from './widget/summary.js';
+
+export {
   dayNumber,
   dateKeyOfDayNumber,
   addDaysKey,
@@ -181,6 +207,8 @@ export {
 } from './habit/date.js';
 
 export { habitLogId, isHabitLogId } from './habit/log-id.js';
+
+export { formatMinuteOfDay, parseMinuteOfDay } from './habit/minute.js';
 
 export { computeStreak, type StreakInfo } from './habit/streak.js';
 

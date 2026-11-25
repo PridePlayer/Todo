@@ -62,6 +62,7 @@ const DEFAULTS: Record<SyncTableName, Record<string, unknown>> = {
     sort_order: 0,
     rrule: null,
     remind_at: null,
+    remind_lead_minutes: null,
   },
   tag: { color_key: 0 },
   list: { sort_order: 0 },
@@ -102,6 +103,7 @@ const DEFAULTS: Record<SyncTableName, Record<string, unknown>> = {
     days_of_week: null,
     color_key: 0,
     sort_order: 0,
+    remind_minute: null,
     archived_at: null,
   },
   habit_log: {

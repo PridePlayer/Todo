@@ -74,6 +74,18 @@ export function sanitizeHabitFields(fields: Record<string, unknown>): SanitizeRe
       .sort((a, b) => a - b);
   }
 
+  if (fields.remindMinute !== undefined) {
+    if (fields.remindMinute === null) {
+      out.remindMinute = null;
+    } else {
+      const minute = Math.trunc(Number(fields.remindMinute));
+      // 0..1439 = 一天内的分钟数。越界不拒绝而是夹到端点：
+      // 一条提醒时间写坏的代价（整天不提醒）比"21:00 变成 23:59"高得多
+      if (!Number.isFinite(minute)) return { ok: false, reason: 'bad_remind_minute' };
+      out.remindMinute = Math.min(1439, Math.max(0, minute));
+    }
+  }
+
   return { ok: true, fields: out };
 }
 

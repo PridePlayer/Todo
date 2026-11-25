@@ -140,6 +140,35 @@ export async function bumpRev(tbl: RowTable, id: string, rev: number): Promise<v
 }
 
 /**
+ * 用服务端合并后的行覆盖本地（push 响应里的 `serverPayload`）。
+ *
+ * 为什么必须有这一步：服务端对打卡值是 `GREATEST(local, remote)`，
+ * 对标签是并集，对四象限是整块裁决 —— 也就是说**推上去的值经常不是你写的那个**。
+ * 只更新 rev 不更新字段，本地就会永远停在旧值上：
+ *
+ *   手机 value=1 推上去 → 服务端已有 2 → merge 保留 2 → 该行 change_seq 不变
+ *   → 之后 pull 用 `change_seq > cursor` 拉不到这行 → 手机永远显示 1/2
+ *
+ * 而这个"永远"是真的永远 —— 不是等一会儿会自己好。
+ *
+ * `AND deleted = 0`：同一批 op 里先删后改时，不能把墓碑又写活。
+ */
+export async function applyServerPayload(
+  tbl: RowTable,
+  id: string,
+  rev: number,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const conn = await openDb();
+  await conn.runAsync('UPDATE doc SET rev = ?, payload = ? WHERE tbl = ? AND id = ? AND deleted = 0', [
+    rev,
+    JSON.stringify(payload),
+    tbl,
+    id,
+  ]);
+}
+
+/**
  * 本地软删：把 deleted 置 1，payload 留空。
  *
  * 不直接 DELETE 行：删完如果 push 失败，本地就再也找不到这条了，

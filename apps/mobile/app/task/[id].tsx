@@ -15,9 +15,25 @@ import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '../../src/store';
+import { PermissionGuide } from '../../src/notify/PermissionGuide';
+import { currentPermission, taskAnchor, taskReminderAt } from '../../src/notify/schedule';
 import { C, FONT, HIT, SP } from '../../src/theme';
 
 const WEEKDAY_CN: Record<Weekday, string> = { MO: '一', TU: '二', WE: '三', TH: '四', FR: '五', SA: '六', SU: '日' };
+
+/**
+ * 提醒只能选"提前量"，不能选绝对时刻。
+ *
+ * 因为提醒的锚点是任务的开始时间：选绝对时刻的话，任务一改期，
+ * 提醒就停在旧时间上，而"改了会，提醒还在昨天响"是没人能一眼看出来的错误。
+ */
+const REMIND_OPTIONS: { label: string; value: number | null }[] = [
+  { label: '不提醒', value: null },
+  { label: '准时', value: 0 },
+  { label: '提前 15 分', value: 15 },
+  { label: '提前 1 小时', value: 60 },
+  { label: '提前 1 天', value: 1440 },
+];
 
 const REPEAT_LABEL: { key: RrulePreset | 'none'; label: string }[] = [
   { key: 'none', label: '不重复' },
@@ -56,6 +72,7 @@ export default function TaskDetailScreen() {
   // task 不存在时提前 return 会让两者不等，React 直接抛 "Rendered fewer hooks"
   const [repeatDays, setRepeatDays] = useState<Weekday[]>([]);
   const [repeatUntil, setRepeatUntil] = useState('');
+  const [guideVisible, setGuideVisible] = useState(false);
 
   // 同步拉取可能在详情页打开后才把这条写进来，等它到了再填一次
   useEffect(() => {
@@ -298,6 +315,46 @@ export default function TaskDetailScreen() {
           />
         </Section>
 
+        <Section title="提醒">
+          <View style={styles.row}>
+            {REMIND_OPTIONS.map((item) => {
+              const on = (task.remindLeadMinutes ?? null) === item.value;
+              return (
+                <Pressable
+                  key={item.label}
+                  onPress={() => {
+                    void patchTask(task.id, { remindLeadMinutes: item.value });
+                    // 第一次设提醒就把权限引导带出来：设了提醒却不会响，
+                    // 用户第一反应是"这功能坏了"，而不是"我该去给权限"
+                    if (item.value !== null) {
+                      void currentPermission().then((state) => {
+                        if (state !== 'granted') setGuideVisible(true);
+                      });
+                    }
+                  }}
+                  style={[styles.chip, on && styles.chipOn]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Text style={[styles.chipText, on && styles.onText]}>{item.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={styles.hint}>
+            {taskAnchor(task) === null
+              ? '先在上面设一个日期，提醒才有可依据的时刻。'
+              : (() => {
+                  const at = taskReminderAt({ ...task, remindLeadMinutes: task.remindLeadMinutes ?? 0 });
+                  if (task.remindLeadMinutes === null) return '当前不提醒。';
+                  if (at === null) return '这条任务缺少可用的时间点。';
+                  const d = new Date(at);
+                  const pad = (n: number) => String(n).padStart(2, '0');
+                  return `将在 ${d.getMonth() + 1} 月 ${d.getDate()} 日 ${pad(d.getHours())}:${pad(d.getMinutes())} 提醒`;
+                })()}
+          </Text>
+        </Section>
+
         <Section title="重复">
           <View style={styles.row}>
             {REPEAT_LABEL.map((item) => (
@@ -420,6 +477,8 @@ export default function TaskDetailScreen() {
           <Text style={styles.dangerText}>删除这条待办</Text>
         </Pressable>
       </ScrollView>
+
+      <PermissionGuide visible={guideVisible} onClose={() => setGuideVisible(false)} />
     </SafeAreaView>
   );
 }

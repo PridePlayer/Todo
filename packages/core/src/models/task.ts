@@ -57,7 +57,20 @@ export const taskSchema = z.object({
 
   /** 重复规则（iCal RRULE）。M1 只存不用，M3 才解析 */
   rrule: z.string().max(512).nullable(),
+  /**
+   * 提醒的绝对时间戳。**历史字段，新代码不再写入** ——
+   * 界面上的"提前 15 分钟"存的是 remindLeadMinutes，因为存绝对时间会在
+   * 任务改期后停在旧时间上（而每个端都得记得重算，漏一端就错）。
+   */
   remindAt: epochMs.nullable(),
+  /**
+   * 提前多少分钟提醒。null = 不提醒。
+   *
+   * 锚点：有 startAt 用 startAt，否则用 dueDate 当天 09:00。
+   * `.default(null)` 不是可有可无的：本地镜像里存着加这一列之前的旧行，
+   * 缺字段会让 safeParse 失败，那条任务直接从列表里消失。
+   */
+  remindLeadMinutes: z.number().int().min(0).max(10080).nullable().default(null),
 
   createdAt: epochMs,
   updatedAt: epochMs,
@@ -82,6 +95,8 @@ export const newTaskSchema = z.object({
   tagIds: z.array(idLike).max(20).default([]),
   /** 重复规则；创建时就可以带，不必先建再改 */
   rrule: z.string().max(512).nullable().default(null),
+  /** 提前多少分钟提醒；不传 = 不提醒 */
+  remindLeadMinutes: z.number().int().min(0).max(10080).nullable().optional(),
 });
 
 export type NewTask = z.input<typeof newTaskSchema>;

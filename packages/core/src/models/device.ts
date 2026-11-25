@@ -17,6 +17,11 @@ export const deviceTokenSchema = z.object({
   expiresAt: z.number().int(),
   revokedAt: z.number().int().nullable(),
   rotatedTo: z.string().nullable(),
+  /**
+   * 令牌权限。旧数据没有这个字段，缺省按 full —— 服务端库里那一列是可空的，
+   * 迁移不回填，两边必须用同一个缺省值，否则设置页会把老设备显示成"受限"。
+   */
+  scope: z.enum(['full', 'widget']).default('full'),
 });
 
 export type DeviceTokenInfo = z.infer<typeof deviceTokenSchema>;

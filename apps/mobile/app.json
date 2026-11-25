@@ -15,8 +15,13 @@
     },
     "android": {
       "package": "me.stellamp.grid",
-      "versionCode": 10,
+      "versionCode": 12,
       "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM",
+        "RECEIVE_BOOT_COMPLETED"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#002FA7",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -33,7 +38,26 @@
           "color": "#002fa7"
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "GridToday",
+              "label": "GRID 今天",
+              "description": "今天要做的三件事与打卡",
+              "minWidth": "250dp",
+              "minHeight": "250dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 4,
+              "resizeMode": "none",
+              "updatePeriodMillis": 1800000,
+              "previewImage": "./assets/icon.png"
+            }
+          ]
+        }
+      ]
     ],
     "extra": {
       "router": {
