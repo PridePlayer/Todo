@@ -12,7 +12,7 @@
 | `packages/server` | Fastify 5 + 双数据库驱动（SQLite / MySQL） |
 | `deploy/` | 部署、备份、恢复、探活脚本 + systemd unit + nginx 模板 |
 | `tools/` | 调试与验收脚本（截图、浏览器验收、备份拉取） |
-| `docs/` | PRD、架构、数据模型、UI 规范、里程碑、验收清单、实现决策、Outlook 接入、部署手册、桌面小组件 |
+| `docs/` | PRD、架构、数据模型、UI 规范、里程碑、验收清单、实现决策、Outlook 接入、部署手册、桌面小组件、批量导入 |
 
 ---
 
@@ -70,6 +70,7 @@ ssh -N -L 3307:127.0.0.1:3307 root@你的服务器
 | `pnpm reset:password --email x` | 重置密码（不给 `--password` 则生成随机密码并打印一次） |
 | `pnpm healthcheck` | 打一次 `/api/healthz` |
 | `cd packages/server && ./node_modules/.bin/tsx ../../tools/widget-check.ts` | 小组件读接口验收（含四条权限反向断言） |
+| `cd packages/server && ./node_modules/.bin/tsx ../../tools/import-check.ts` | CSV 导入解析验收（31 条） |
 | `pnpm check:secrets` | 检查 `.env` 的真实值有没有漏进被追踪的文件（提交前跑一下） |
 | `bash deploy/backup.sh` | 立刻做一次备份（服务器上跑） |
 | `bash deploy/restore.sh` | 从备份恢复（不带参数会列出可选项） |

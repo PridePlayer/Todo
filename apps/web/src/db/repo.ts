@@ -36,8 +36,13 @@ function nowMs(): number {
   return Date.now();
 }
 
-/** 线上 payload：与 core 的 Task 模型同名同义，服务端 task-map 负责落库映射 */
-function taskPayload(task: Task): Record<string, unknown> {
+/**
+ * 线上 payload：与 core 的 Task 模型同名同义，服务端 task-map 负责落库映射。
+ *
+ * 导出是给 db/import.ts 用的：批量导入必须与单条创建走**同一份** payload，
+ * 否则某天加字段时只改了一处，导入进来的任务就会静默缺字段。
+ */
+export function taskPayload(task: Task): Record<string, unknown> {
   return {
     listId: task.listId,
     parentId: task.parentId,

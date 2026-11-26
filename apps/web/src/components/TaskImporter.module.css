@@ -1,0 +1,201 @@
+/* 批量导入。全部值走 design/tokens.css，不出现裸 hex，圆角只用 --r-sm */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.lead {
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  color: var(--n-700);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.ghost {
+  height: 32px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--n-300);
+  border-radius: var(--r-sm);
+  background: var(--n-0);
+  color: var(--n-800);
+  font-size: var(--t-base);
+  cursor: pointer;
+}
+
+.ghost:hover:not(:disabled) {
+  border-color: var(--n-500);
+}
+
+.ghost:disabled {
+  color: var(--n-400);
+  border-color: var(--n-200);
+  cursor: not-allowed;
+}
+
+/* 用 label 包隐藏的 input：原生 file input 的外观在各浏览器里完全不统一 */
+.fileLabel {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--a-500);
+  border-radius: var(--r-sm);
+  background: var(--a-100);
+  color: var(--a-500);
+  font-size: var(--t-base);
+  cursor: pointer;
+}
+
+.fileLabel:hover {
+  background: var(--a-200);
+}
+
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fileName {
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  color: var(--n-500);
+}
+
+.help {
+  font-size: var(--t-base);
+  color: var(--n-700);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  padding: var(--sp-3);
+}
+
+.help > summary {
+  cursor: pointer;
+  color: var(--n-800);
+}
+
+.helpList {
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  line-height: var(--lh-base);
+}
+
+.helpList code {
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  background: var(--n-100);
+  padding: 0 3px;
+  border-radius: var(--r-sm);
+}
+
+.helpNote {
+  margin: var(--sp-2) 0 0;
+  color: var(--n-500);
+  line-height: var(--lh-base);
+}
+
+.error {
+  color: var(--danger);
+  font-size: var(--t-base);
+  line-height: var(--lh-base);
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  border: var(--line);
+  border-radius: var(--r-sm);
+  padding: var(--sp-3);
+  background: var(--n-50);
+}
+
+.summary {
+  font-size: var(--t-base);
+  color: var(--n-800);
+}
+
+.bad {
+  color: var(--danger);
+}
+
+.errorBox {
+  border: 1px solid var(--danger);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--n-0);
+}
+
+.errorTitle {
+  font-size: var(--t-base);
+  color: var(--danger);
+  margin-bottom: var(--sp-1);
+}
+
+.errorList {
+  margin: 0;
+  padding-left: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--t-sm);
+  line-height: var(--lh-sm);
+  color: var(--n-700);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.lineNo {
+  font-family: var(--font-mono);
+  color: var(--danger);
+  margin-right: var(--sp-2);
+}
+
+.more {
+  margin-top: var(--sp-1);
+  font-size: var(--t-sm);
+  color: var(--n-500);
+}
+
+.primary {
+  height: 32px;
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--a-500);
+  border-radius: var(--r-sm);
+  background: var(--a-500);
+  color: var(--n-0);
+  font-size: var(--t-base);
+  cursor: pointer;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--a-600);
+}
+
+.primary:disabled {
+  background: var(--n-300);
+  border-color: var(--n-300);
+  cursor: not-allowed;
+}
+
+.success {
+  font-size: var(--t-base);
+  line-height: var(--lh-base);
+  color: var(--n-800);
+  border-left: 2px solid var(--a-500);
+  padding-left: var(--sp-3);
+}

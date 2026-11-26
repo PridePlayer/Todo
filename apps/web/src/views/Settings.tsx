@@ -1,5 +1,6 @@
 import type { SessionUser } from '@grid/core';
 import { useCallback, useEffect, useState } from 'react';
+import { TaskImporter } from '../components/TaskImporter';
 import { db } from '../db/dexie';
 import { OutlookPanel } from './OutlookPanel';
 import { SettingsCalendar } from './SettingsCalendar';
@@ -194,6 +195,15 @@ export function Settings({ user }: SettingsProps) {
           导出的文件包含已删除的待办（标记为墓碑），这样恢复时才不会出现「父任务回来了、子任务没了」。
           文件里有你的日历与打卡历史，等于一份完整的隐私副本，别丢到公开的地方。
         </p>
+      </section>
+
+      <section className={styles.section} aria-labelledby="import-title">
+        <div className={styles.sectionHead}>
+          <h2 className={styles.h2} id="import-title">
+            批量导入任务
+          </h2>
+        </div>
+        <TaskImporter />
       </section>
 
       <section className={styles.section} aria-labelledby="health-title">
